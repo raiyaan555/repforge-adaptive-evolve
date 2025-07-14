@@ -45,7 +45,7 @@ interface CustomPlanBuilderProps {
 
 export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, onPlanCreated }: CustomPlanBuilderProps) {
   const [workoutPlan, setWorkoutPlan] = useState<Record<string, DayWorkout[]>>({});
-  const [availableExercises, setAvailableExercises] = useState<{name: string}[]>([]);
+  const [exercisesByMuscleGroup, setExercisesByMuscleGroup] = useState<Record<string, {name: string}[]>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [planName, setPlanName] = useState("");
   const [selectedDay, setSelectedDay] = useState("monday");
@@ -87,9 +87,14 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
       ) || []
     }));
 
-    // Load exercises for this muscle group
-    const exercises = await loadExercises(muscleGroup);
-    setAvailableExercises(exercises);
+    // Load exercises for this muscle group if not already loaded
+    if (!exercisesByMuscleGroup[muscleGroup]) {
+      const exercises = await loadExercises(muscleGroup);
+      setExercisesByMuscleGroup(prev => ({
+        ...prev,
+        [muscleGroup]: exercises
+      }));
+    }
   };
 
   const addExercise = (day: string, workoutIndex: number) => {
@@ -290,7 +295,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                                   <SelectValue placeholder="Select exercise" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {availableExercises.map((ex) => (
+                                  {(exercisesByMuscleGroup[workout.muscleGroup] || []).map((ex) => (
                                     <SelectItem key={ex.name} value={ex.name}>
                                       {ex.name}
                                     </SelectItem>
