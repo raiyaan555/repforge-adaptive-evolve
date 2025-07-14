@@ -45,9 +45,10 @@ const programs = [
 
 interface ProgramSelectorProps {
   onProgramStart: (program: string, duration: number) => void;
+  onDefaultWorkout?: (program: string, duration: number) => void;
 }
 
-export function ProgramSelector({ onProgramStart }: ProgramSelectorProps) {
+export function ProgramSelector({ onProgramStart, onDefaultWorkout }: ProgramSelectorProps) {
   const [selectedProgram, setSelectedProgram] = useState<string>("");
   const [selectedDuration, setSelectedDuration] = useState<number>(6);
 
@@ -93,28 +94,47 @@ export function ProgramSelector({ onProgramStart }: ProgramSelectorProps) {
         </div>
       )}
 
-      {/* Program Summary */}
+      {/* Workout Creation Options */}
       {selectedProgram && (
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle className="text-center">Your Program Summary</CardTitle>
+            <CardTitle className="text-center">Choose Your Workout Style</CardTitle>
           </CardHeader>
-          <CardContent className="text-center">
-            <p className="text-lg mb-6">
+          <CardContent>
+            <p className="text-center text-lg mb-6">
               You've chosen <span className="font-semibold text-primary">{programs.find(p => p.id === selectedProgram)?.title}</span> for{" "}
               <span className="font-semibold text-primary">{selectedDuration} weeks</span>.
-              <br />
-              Your program will adapt based on your feedback after each workout.
             </p>
             
-            <Button 
-              size="lg" 
-              variant="energy" 
-              onClick={handleStartPlan}
-              className="text-lg px-12 py-4 h-auto"
-            >
-              Start My Plan
-            </Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-primary/50">
+                <CardContent className="p-6 text-center">
+                  <h3 className="text-xl font-semibold mb-3">Let the app choose workouts for me</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Use our proven workout templates designed by fitness experts
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => onDefaultWorkout?.(selectedProgram, selectedDuration)}
+                  >
+                    Use Default Workouts
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-primary/50">
+                <CardContent className="p-6 text-center">
+                  <h3 className="text-xl font-semibold mb-3">Build my own custom plan</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Create a personalized workout plan with your favorite exercises
+                  </p>
+                  <Button variant="energy" className="w-full" onClick={handleStartPlan}>
+                    Build Custom Plan
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </CardContent>
         </Card>
       )}

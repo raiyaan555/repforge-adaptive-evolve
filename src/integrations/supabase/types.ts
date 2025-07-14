@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      custom_workouts: {
+        Row: {
+          created_at: string
+          days_per_week: number
+          duration_weeks: number
+          id: string
+          name: string
+          program_type: string
+          updated_at: string
+          user_id: string
+          workout_structure: Json
+        }
+        Insert: {
+          created_at?: string
+          days_per_week: number
+          duration_weeks: number
+          id?: string
+          name: string
+          program_type: string
+          updated_at?: string
+          user_id: string
+          workout_structure: Json
+        }
+        Update: {
+          created_at?: string
+          days_per_week?: number
+          duration_weeks?: number
+          id?: string
+          name?: string
+          program_type?: string
+          updated_at?: string
+          user_id?: string
+          workout_structure?: Json
+        }
+        Relationships: []
+      }
+      default_workouts: {
+        Row: {
+          created_at: string
+          days_per_week: number
+          duration_weeks: number
+          id: string
+          name: string
+          program_type: string
+          updated_at: string
+          workout_structure: Json
+        }
+        Insert: {
+          created_at?: string
+          days_per_week?: number
+          duration_weeks: number
+          id?: string
+          name: string
+          program_type: string
+          updated_at?: string
+          workout_structure: Json
+        }
+        Update: {
+          created_at?: string
+          days_per_week?: number
+          duration_weeks?: number
+          id?: string
+          name?: string
+          program_type?: string
+          updated_at?: string
+          workout_structure?: Json
+        }
+        Relationships: []
+      }
       exercises: {
         Row: {
           category: string | null

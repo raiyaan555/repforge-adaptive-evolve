@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Hero } from "@/components/Hero";
 import { ProgramSelector } from "@/components/ProgramSelector";
-import { CustomPlanBuilder } from "@/components/CustomPlanBuilder";
+import { CustomPlanBuilder } from "@/pages/CustomPlanBuilder";
+import { WorkoutLibrary } from "@/pages/WorkoutLibrary";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 
-type AppState = "hero" | "program-selector" | "custom-builder" | "plan-created";
+type AppState = "hero" | "program-selector" | "custom-builder" | "workout-library" | "plan-created";
 
 const Index = () => {
   const [appState, setAppState] = useState<AppState>("hero");
@@ -44,10 +45,22 @@ const Index = () => {
   };
 
   const handlePlanCreated = () => {
-    setAppState("plan-created");
+    setAppState("workout-library");
     toast({
       title: "Plan Created Successfully! 🎉",
       description: "Your personalized workout plan is ready. Time to start your transformation journey!",
+    });
+  };
+
+  const handleDefaultWorkout = () => {
+    setAppState("workout-library");
+  };
+
+  const handleWorkoutSelected = (workout: any) => {
+    setAppState("plan-created");
+    toast({
+      title: "Workout Selected! 🎉",
+      description: `You've selected ${workout.name}. Ready to start your fitness journey!`,
     });
   };
 
@@ -89,7 +102,10 @@ const Index = () => {
       )}
 
       {appState === "program-selector" && (
-        <ProgramSelector onProgramStart={handleProgramStart} />
+        <ProgramSelector 
+          onProgramStart={handleProgramStart} 
+          onDefaultWorkout={handleDefaultWorkout}
+        />
       )}
 
       {appState === "custom-builder" && (
@@ -98,6 +114,13 @@ const Index = () => {
           selectedDuration={selectedDuration}
           onBack={() => setAppState("program-selector")}
           onPlanCreated={handlePlanCreated}
+        />
+      )}
+
+      {appState === "workout-library" && (
+        <WorkoutLibrary
+          onBack={() => setAppState("program-selector")}
+          onWorkoutSelected={handleWorkoutSelected}
         />
       )}
 

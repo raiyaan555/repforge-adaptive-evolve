@@ -33,40 +33,16 @@ export function Hero({ onGetStarted }: HeroProps) {
             Start strong, stay motivated, evolve continuously.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+          <div className="flex justify-center">
             <Button 
               size="lg" 
               variant="energy" 
               onClick={onGetStarted}
               className="text-lg px-8 py-4 h-auto"
             >
-              Start My Transformation
+              Start a New Plan
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-            
-            <Button 
-              size="lg" 
-              variant="outline" 
-              className="text-lg px-8 py-4 h-auto"
-            >
-              <Play className="mr-2 h-5 w-5" />
-              Watch Demo
-            </Button>
-          </div>
-          
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
-            <div>
-              <div className="text-3xl font-bold text-primary mb-2">50K+</div>
-              <div className="text-muted-foreground">Active Users</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-primary mb-2">1M+</div>
-              <div className="text-muted-foreground">Workouts Completed</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-primary mb-2">95%</div>
-              <div className="text-muted-foreground">Success Rate</div>
-            </div>
           </div>
         </div>
       </div>
