@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +39,7 @@ export function WorkoutLibrary({ onBack, onWorkoutSelected }: WorkoutLibraryProp
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadWorkouts();
@@ -92,7 +94,7 @@ export function WorkoutLibrary({ onBack, onWorkoutSelected }: WorkoutLibraryProp
     const workoutDays = getWorkoutDays(workout.workout_structure);
     
     return (
-      <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => onWorkoutSelected(workout)}>
+      <Card className="cursor-pointer hover:shadow-lg transition-shadow">
         <CardHeader>
           <div className="flex items-start justify-between">
             <div>
@@ -131,7 +133,11 @@ export function WorkoutLibrary({ onBack, onWorkoutSelected }: WorkoutLibraryProp
             </div>
 
             <div className="pt-3">
-              <Button variant="outline" className="w-full">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={() => navigate(`/workout-log/${workout.id}`)}
+              >
                 Start This Workout
               </Button>
             </div>

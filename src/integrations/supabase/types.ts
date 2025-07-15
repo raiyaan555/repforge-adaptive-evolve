@@ -110,6 +110,78 @@ export type Database = {
         }
         Relationships: []
       }
+      mesocycle: {
+        Row: {
+          actual_reps: number[] | null
+          actual_sets: number | null
+          can_add_sets: boolean | null
+          created_at: string
+          day_number: number
+          exercise_name: string
+          feedback_given: boolean | null
+          id: string
+          is_sore: boolean | null
+          muscle_group: string
+          plan_id: string | null
+          planned_reps: number
+          planned_sets: number
+          pump_level: string | null
+          rir: number | null
+          updated_at: string
+          user_id: string
+          week_number: number
+          weight_unit: string | null
+          weight_used: number[] | null
+          workout_name: string
+        }
+        Insert: {
+          actual_reps?: number[] | null
+          actual_sets?: number | null
+          can_add_sets?: boolean | null
+          created_at?: string
+          day_number: number
+          exercise_name: string
+          feedback_given?: boolean | null
+          id?: string
+          is_sore?: boolean | null
+          muscle_group: string
+          plan_id?: string | null
+          planned_reps: number
+          planned_sets: number
+          pump_level?: string | null
+          rir?: number | null
+          updated_at?: string
+          user_id: string
+          week_number: number
+          weight_unit?: string | null
+          weight_used?: number[] | null
+          workout_name: string
+        }
+        Update: {
+          actual_reps?: number[] | null
+          actual_sets?: number | null
+          can_add_sets?: boolean | null
+          created_at?: string
+          day_number?: number
+          exercise_name?: string
+          feedback_given?: boolean | null
+          id?: string
+          is_sore?: boolean | null
+          muscle_group?: string
+          plan_id?: string | null
+          planned_reps?: number
+          planned_sets?: number
+          pump_level?: string | null
+          rir?: number | null
+          updated_at?: string
+          user_id?: string
+          week_number?: number
+          weight_unit?: string | null
+          weight_used?: number[] | null
+          workout_name?: string
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           created_at: string
