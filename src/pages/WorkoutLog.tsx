@@ -115,26 +115,41 @@ export function WorkoutLog() {
 
   const initializeWorkoutLogs = (workoutData: any) => {
     const structure = workoutData.workout_structure as WorkoutStructure;
-    const dayKey = `day${currentDay}`;
+    console.log('Workout structure:', structure);
+    
+    // Get the available days from the structure
+    const availableDays = Object.keys(structure);
+    console.log('Available days:', availableDays);
+    
+    // Use the first available day if dayKey doesn't exist
+    const dayKey = availableDays[0] || 'monday';
     const dayWorkout = structure[dayKey] || [];
+    
+    console.log('Day key:', dayKey);
+    console.log('Day workout:', dayWorkout);
     
     const logs: WorkoutLog[] = [];
     
-    dayWorkout.forEach((muscleGroupData) => {
-      muscleGroupData.exercises.forEach((exercise) => {
-        logs.push({
-          exercise: exercise.name,
-          muscleGroup: muscleGroupData.muscleGroup,
-          plannedSets: exercise.sets,
-          plannedReps: exercise.reps,
-          actualReps: new Array(exercise.sets).fill(0),
-          weights: new Array(exercise.sets).fill(0),
-          rir: 0,
-          completed: false
-        });
+    if (Array.isArray(dayWorkout)) {
+      dayWorkout.forEach((muscleGroupData) => {
+        if (muscleGroupData.exercises && Array.isArray(muscleGroupData.exercises)) {
+          muscleGroupData.exercises.forEach((exercise) => {
+            logs.push({
+              exercise: exercise.name,
+              muscleGroup: muscleGroupData.muscleGroup,
+              plannedSets: exercise.sets,
+              plannedReps: exercise.reps,
+              actualReps: new Array(exercise.sets).fill(0),
+              weights: new Array(exercise.sets).fill(0),
+              rir: 0,
+              completed: false
+            });
+          });
+        }
       });
-    });
+    }
     
+    console.log('Initialized logs:', logs);
     setWorkoutLogs(logs);
   };
 
