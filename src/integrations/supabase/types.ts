@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      active_workouts: {
+        Row: {
+          created_at: string
+          current_day: number
+          current_week: number
+          id: string
+          started_at: string
+          updated_at: string
+          user_id: string
+          workout_id: string
+          workout_type: string
+        }
+        Insert: {
+          created_at?: string
+          current_day?: number
+          current_week?: number
+          id?: string
+          started_at?: string
+          updated_at?: string
+          user_id: string
+          workout_id: string
+          workout_type: string
+        }
+        Update: {
+          created_at?: string
+          current_day?: number
+          current_week?: number
+          id?: string
+          started_at?: string
+          updated_at?: string
+          user_id?: string
+          workout_id?: string
+          workout_type?: string
+        }
+        Relationships: []
+      }
       custom_workouts: {
         Row: {
           created_at: string
@@ -231,6 +267,7 @@ export type Database = {
           first_name: string | null
           id: string
           last_name: string | null
+          unit_preference: string | null
           updated_at: string
           user_id: string
         }
@@ -240,6 +277,7 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          unit_preference?: string | null
           updated_at?: string
           user_id: string
         }
@@ -249,8 +287,39 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          unit_preference?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      workout_calendar: {
+        Row: {
+          created_at: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+          workout_date: string
+          workout_summary: Json | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          status: string
+          updated_at?: string
+          user_id: string
+          workout_date: string
+          workout_summary?: Json | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          workout_date?: string
+          workout_summary?: Json | null
         }
         Relationships: []
       }
