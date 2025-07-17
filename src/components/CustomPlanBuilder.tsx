@@ -103,6 +103,40 @@ export function CustomPlanBuilder({
     return 4; // strength
   };
 
+  const createWorkoutStructure = () => {
+    const daysPerWeek = calculateDaysPerWeek();
+    const structure: any = {};
+    
+    // Create Day 1 to Day X structure instead of weekdays
+    for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+      const dayKey = `day${dayNum}`;
+      structure[dayKey] = [];
+      
+      // Distribute exercises across days
+      selectedMuscleGroups.forEach((muscleGroup, index) => {
+        if ((index % daysPerWeek) + 1 === dayNum) {
+          const muscleGroupExercises = exercises
+            .filter(ex => ex.muscle_group === muscleGroup && selectedExercises.includes(ex.name))
+            .slice(0, 3); // Limit to 3 exercises per muscle group per day
+          
+          if (muscleGroupExercises.length > 0) {
+            structure[dayKey].push({
+              muscleGroup,
+              exercises: muscleGroupExercises.map(ex => ({
+                name: ex.name,
+                sets: selectedProgram === 'strength' ? 5 : selectedProgram === 'hypertrophy' ? 4 : 3,
+                reps: selectedProgram === 'strength' ? 5 : selectedProgram === 'hypertrophy' ? 12 : 15,
+                restTime: selectedProgram === 'strength' ? '3-5 min' : '60-90 sec'
+              }))
+            });
+          }
+        }
+      });
+    }
+    
+    return structure;
+  };
+
   const handleCreatePlan = async () => {
     if (selectedMuscleGroups.length === 0) {
       toast({
@@ -125,17 +159,17 @@ export function CustomPlanBuilder({
     setLoading(true);
     try {
       const planName = `${selectedProgram.charAt(0).toUpperCase() + selectedProgram.slice(1)} Plan`;
+      const workoutStructure = createWorkoutStructure();
       
       const { error } = await supabase
-        .from('plans')
+        .from('custom_workouts')
         .insert({
           user_id: user?.id,
           name: planName,
           program_type: selectedProgram,
           duration_weeks: selectedDuration,
-          muscle_groups: selectedMuscleGroups,
-          exercises: selectedExercises,
           days_per_week: calculateDaysPerWeek(),
+          workout_structure: workoutStructure,
         });
 
       if (error) throw error;

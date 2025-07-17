@@ -96,9 +96,8 @@ export function CurrentMesocycle() {
 
   const loadCurrentDayExercises = (workout: WorkoutDetails, dayNumber: number) => {
     const structure = workout.workout_structure;
-    const dayKeys = Object.keys(structure);
-    const currentDayKey = dayKeys[dayNumber - 1] || dayKeys[0];
-    const dayWorkout = structure[currentDayKey] || [];
+    const dayKey = `day${dayNumber}`;
+    const dayWorkout = structure[dayKey] || [];
     
     const exercises: any[] = [];
     if (Array.isArray(dayWorkout)) {
@@ -115,6 +114,39 @@ export function CurrentMesocycle() {
     }
     
     setCurrentDayExercises(exercises);
+  };
+
+  const getAllWeekExercises = () => {
+    if (!workoutDetails) return [];
+    
+    const structure = workoutDetails.workout_structure;
+    const weekExercises = [];
+    
+    for (let day = 1; day <= workoutDetails.days_per_week; day++) {
+      const dayKey = `day${day}`;
+      const dayWorkout = structure[dayKey] || [];
+      const dayExercises: any[] = [];
+      
+      if (Array.isArray(dayWorkout)) {
+        dayWorkout.forEach((muscleGroup: any) => {
+          if (muscleGroup.exercises && Array.isArray(muscleGroup.exercises)) {
+            muscleGroup.exercises.forEach((exercise: any) => {
+              dayExercises.push({
+                ...exercise,
+                muscleGroup: muscleGroup.muscleGroup
+              });
+            });
+          }
+        });
+      }
+      
+      weekExercises.push({
+        day,
+        exercises: dayExercises
+      });
+    }
+    
+    return weekExercises;
   };
 
   const handleEndWorkout = async () => {
@@ -264,7 +296,7 @@ export function CurrentMesocycle() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Today's Workout</span>
+            <span>Day {activeWorkout.current_day} Workout</span>
             <Button 
               onClick={() => navigate(`/workout-log/${workoutDetails.id}`)}
               size="sm"
@@ -294,6 +326,37 @@ export function CurrentMesocycle() {
               No exercises found for today
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Weekly Preview */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Week {activeWorkout.current_week} Preview</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4">
+            {getAllWeekExercises().map((day) => (
+              <div key={day.day} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold">Day {day.day}</h4>
+                  {day.day === activeWorkout.current_day && (
+                    <Badge variant="default">Current</Badge>
+                  )}
+                  {day.day < activeWorkout.current_day && (
+                    <Badge variant="secondary">Completed</Badge>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {day.exercises.map((exercise, index) => (
+                    <div key={index} className="text-sm text-muted-foreground">
+                      {exercise.name} - {exercise.sets} sets × {exercise.reps} reps
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

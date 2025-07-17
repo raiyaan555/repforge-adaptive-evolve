@@ -73,6 +73,31 @@ export function WorkoutLog() {
     }
   }, [workoutId, user]);
 
+  useEffect(() => {
+    // Load current week and day from active workout
+    if (user && workoutId) {
+      loadActiveWorkoutInfo();
+    }
+  }, [user, workoutId]);
+
+  const loadActiveWorkoutInfo = async () => {
+    try {
+      const { data: activeWorkout } = await supabase
+        .from('active_workouts')
+        .select('current_week, current_day')
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId)
+        .single();
+        
+      if (activeWorkout) {
+        setCurrentWeek(activeWorkout.current_week);
+        setCurrentDay(activeWorkout.current_day);
+      }
+    } catch (error) {
+      console.error('Error loading active workout info:', error);
+    }
+  };
+
   const loadWorkout = async () => {
     try {
       setLoading(true);
@@ -117,12 +142,8 @@ export function WorkoutLog() {
     const structure = workoutData.workout_structure as WorkoutStructure;
     console.log('Workout structure:', structure);
     
-    // Get the available days from the structure
-    const availableDays = Object.keys(structure);
-    console.log('Available days:', availableDays);
-    
-    // Use the first available day if dayKey doesn't exist
-    const dayKey = availableDays[0] || 'monday';
+    // Get current day from active workout or default to day 1
+    const dayKey = `day${currentDay}`;
     const dayWorkout = structure[dayKey] || [];
     
     console.log('Day key:', dayKey);
@@ -214,15 +235,52 @@ export function WorkoutLog() {
         });
       }
 
-      // Apply progression algorithm
-      await applyProgressionAlgorithm(muscleGroup, exercises);
-
-      toast({
-        title: "Progress Saved",
-        description: "Your workout feedback has been recorded and next week's plan updated!"
+      // Mark workout as completed in calendar
+      await supabase.from('workout_calendar').insert({
+        user_id: user.id,
+        workout_date: new Date().toISOString().split('T')[0],
+        status: 'completed',
+        workout_summary: {
+          exercises: exercises.map(ex => ({
+            name: ex.exercise,
+            sets: ex.actualReps.length,
+            reps: ex.actualReps,
+            weights: ex.weights
+          })),
+          feedback: {
+            pump_level: feedback.pumpLevel,
+            is_sore: feedback.isSore,
+            can_add_sets: feedback.canAddSets
+          }
+        }
       });
 
-      setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
+      // Update active workout - move to next day
+      const nextDay = currentDay < workout.days_per_week ? currentDay + 1 : 1;
+      const nextWeek = currentDay < workout.days_per_week ? currentWeek : currentWeek + 1;
+      
+      await supabase
+        .from('active_workouts')
+        .update({
+          current_day: nextDay,
+          current_week: nextWeek,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId);
+
+      // Apply progression algorithm if moving to new week
+      if (nextWeek > currentWeek) {
+        await applyProgressionAlgorithm(muscleGroup, exercises);
+      }
+
+      toast({
+        title: "Workout Complete! 🎉",
+        description: `Great job! Moving to Day ${nextDay}, Week ${nextWeek}`
+      });
+
+      // Navigate back to current mesocycle
+      navigate('/current-mesocycle');
     } catch (error) {
       console.error('Error saving feedback:', error);
       toast({
