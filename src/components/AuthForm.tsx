@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 export function AuthForm() {
   const [isLogin, setIsLogin] = useState(true);
@@ -20,6 +22,7 @@ export function AuthForm() {
 
   const { signUp, signIn } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +42,29 @@ export function AuthForm() {
             title: "Welcome back! 💪",
             description: "You're now logged in and ready to forge your strength.",
           });
+          
+          // Check for active workout and redirect accordingly
+          setTimeout(async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session?.user) {
+                const { data: activeWorkout } = await supabase
+                  .from('active_workouts')
+                  .select('*')
+                  .eq('user_id', session.user.id)
+                  .maybeSingle();
+                
+                if (activeWorkout) {
+                  navigate('/current-mesocycle');
+                } else {
+                  navigate('/');
+                }
+              }
+            } catch (error) {
+              console.error('Error checking active workout:', error);
+              navigate('/');
+            }
+          }, 500);
         }
       } else {
         if (password !== confirmPassword) {

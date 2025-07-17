@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useNavigate } from 'react-router-dom';
 
 interface AuthContextType {
   user: User | null;
@@ -37,29 +38,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
-        
-        // Handle login redirect logic
-        if (event === 'SIGNED_IN' && session?.user) {
-          setTimeout(async () => {
-            try {
-              // Check if user has active workout
-              const { data: activeWorkout } = await supabase
-                .from('active_workouts')
-                .select('*')
-                .eq('user_id', session.user.id)
-                .maybeSingle();
-              
-              if (activeWorkout) {
-                window.location.href = '/current-mesocycle';
-              } else {
-                window.location.href = '/';
-              }
-            } catch (error) {
-              console.error('Error checking active workout:', error);
-              window.location.href = '/';
-            }
-          }, 100);
-        }
       }
     );
 
