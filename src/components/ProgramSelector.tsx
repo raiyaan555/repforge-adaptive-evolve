@@ -8,38 +8,16 @@ const programs = [
   {
     id: "strength",
     title: "Strength",
-    description: "Build raw power and muscle strength",
-    features: [
-      "Heavy compound movements",
-      "Progressive overload focus",
-      "3-4 workouts per week",
-      "Strength tracking metrics"
-    ],
+    description: "",
+    features: [],
     icon: "strength" as const,
   },
   {
     id: "hypertrophy", 
     title: "Hypertrophy",
-    description: "Maximize muscle growth and size",
-    features: [
-      "Volume-based training",
-      "Muscle group targeting",
-      "4-5 workouts per week", 
-      "Size measurement tracking"
-    ],
+    description: "",
+    features: [],
     icon: "hypertrophy" as const,
-  },
-  {
-    id: "hiit",
-    title: "HIIT",
-    description: "High-intensity interval training",
-    features: [
-      "Fat burning focus",
-      "Time-efficient workouts",
-      "3-4 sessions per week",
-      "Cardio + strength combo"
-    ],
-    icon: "hiit" as const,
   },
 ];
 

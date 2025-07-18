@@ -122,12 +122,12 @@ export function CurrentMesocycle() {
     const structure = workoutDetails.workout_structure;
     const weekExercises = [];
     
-    for (let day = 1; day <= workoutDetails.days_per_week; day++) {
+    for (let day = 1; day <= 8; day++) {
       const dayKey = `day${day}`;
       const dayWorkout = structure[dayKey] || [];
       const dayExercises: any[] = [];
       
-      if (Array.isArray(dayWorkout)) {
+      if (Array.isArray(dayWorkout) && dayWorkout.length > 0) {
         dayWorkout.forEach((muscleGroup: any) => {
           if (muscleGroup.exercises && Array.isArray(muscleGroup.exercises)) {
             muscleGroup.exercises.forEach((exercise: any) => {
@@ -142,7 +142,8 @@ export function CurrentMesocycle() {
       
       weekExercises.push({
         day,
-        exercises: dayExercises
+        exercises: dayExercises,
+        isRestDay: dayExercises.length === 0
       });
     }
     
@@ -347,13 +348,33 @@ export function CurrentMesocycle() {
                     <Badge variant="secondary">Completed</Badge>
                   )}
                 </div>
-                <div className="space-y-2">
-                  {day.exercises.map((exercise, index) => (
-                    <div key={index} className="text-sm text-muted-foreground">
-                      {exercise.name} - {exercise.sets} sets × {exercise.reps} reps
-                    </div>
-                  ))}
-                </div>
+                {day.isRestDay ? (
+                  <div className="text-sm text-muted-foreground">
+                    💤 Rest Day
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* Group exercises by muscle group */}
+                    {Object.entries(
+                      day.exercises.reduce((acc: any, exercise: any) => {
+                        if (!acc[exercise.muscleGroup]) {
+                          acc[exercise.muscleGroup] = [];
+                        }
+                        acc[exercise.muscleGroup].push(exercise);
+                        return acc;
+                      }, {})
+                    ).map(([muscleGroup, exercises]: [string, any[]]) => (
+                      <div key={muscleGroup} className="text-sm">
+                        <div className="font-medium text-primary">{muscleGroup}:</div>
+                        {exercises.map((exercise, index) => (
+                          <div key={index} className="text-muted-foreground ml-2">
+                            • {exercise.name}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

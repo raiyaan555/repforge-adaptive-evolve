@@ -36,6 +36,7 @@ interface WorkoutLog {
   weights: number[];
   rir?: number;
   completed: boolean;
+  currentSets: number;
 }
 
 interface MuscleGroupFeedback {
@@ -160,10 +161,11 @@ export function WorkoutLog() {
               muscleGroup: muscleGroupData.muscleGroup,
               plannedSets: exercise.sets,
               plannedReps: exercise.reps,
-              actualReps: new Array(exercise.sets).fill(0),
-              weights: new Array(exercise.sets).fill(0),
+              actualReps: [],
+              weights: [],
               rir: 0,
-              completed: false
+              completed: false,
+              currentSets: 0
             });
           });
         }
@@ -182,12 +184,39 @@ export function WorkoutLog() {
 
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight', value: number) => {
     const updatedLogs = [...workoutLogs];
+    
+    // Ensure arrays are long enough
+    while (updatedLogs[exerciseIndex].actualReps.length <= setIndex) {
+      updatedLogs[exerciseIndex].actualReps.push(0);
+    }
+    while (updatedLogs[exerciseIndex].weights.length <= setIndex) {
+      updatedLogs[exerciseIndex].weights.push(0);
+    }
+    
     if (field === 'reps') {
       updatedLogs[exerciseIndex].actualReps[setIndex] = value;
     } else {
       updatedLogs[exerciseIndex].weights[setIndex] = value;
     }
     setWorkoutLogs(updatedLogs);
+  };
+
+  const addSet = (exerciseIndex: number) => {
+    const updatedLogs = [...workoutLogs];
+    updatedLogs[exerciseIndex].currentSets++;
+    updatedLogs[exerciseIndex].actualReps.push(0);
+    updatedLogs[exerciseIndex].weights.push(0);
+    setWorkoutLogs(updatedLogs);
+  };
+
+  const removeSet = (exerciseIndex: number) => {
+    const updatedLogs = [...workoutLogs];
+    if (updatedLogs[exerciseIndex].currentSets > 0) {
+      updatedLogs[exerciseIndex].currentSets--;
+      updatedLogs[exerciseIndex].actualReps.pop();
+      updatedLogs[exerciseIndex].weights.pop();
+      setWorkoutLogs(updatedLogs);
+    }
   };
 
   const getMuscleGroupExercises = (muscleGroup: string) => {
@@ -256,8 +285,8 @@ export function WorkoutLog() {
       });
 
       // Update active workout - move to next day
-      const nextDay = currentDay < workout.days_per_week ? currentDay + 1 : 1;
-      const nextWeek = currentDay < workout.days_per_week ? currentWeek : currentWeek + 1;
+      const nextDay = currentDay < 8 ? currentDay + 1 : 1;
+      const nextWeek = currentDay < 8 ? currentWeek : currentWeek + 1;
       
       await supabase
         .from('active_workouts')
@@ -396,56 +425,80 @@ export function WorkoutLog() {
                       const originalIndex = workoutLogs.findIndex(log => log === exercise);
                       
                       return (
-                        <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold">{exercise.exercise}</h3>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline">
-                                {exercise.plannedSets} sets × {exercise.plannedReps} reps
-                              </Badge>
-                              <Button
-                                variant={exercise.completed ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => updateWorkoutLog(originalIndex, 'completed', !exercise.completed)}
-                              >
-                                {exercise.completed ? 'Completed' : 'Mark Complete'}
-                              </Button>
+                          <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-semibold">{exercise.exercise}</h3>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline">
+                                  {exercise.plannedSets} sets × {exercise.plannedReps} reps
+                                </Badge>
+                                <Button
+                                  variant={exercise.completed ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={() => updateWorkoutLog(originalIndex, 'completed', !exercise.completed)}
+                                >
+                                  {exercise.completed ? 'Completed' : 'Mark Complete'}
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {Array.from({ length: exercise.plannedSets }).map((_, setIndex) => (
-                              <div key={setIndex} className="border rounded p-3">
-                                <Label className="text-sm font-medium mb-2 block">
-                                  Set {setIndex + 1}
-                                </Label>
-                                <div className="space-y-2">
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">
-                                      Weight ({weightUnit})
-                                    </Label>
-                                    <Input
-                                      type="number"
-                                      value={exercise.weights[setIndex] || ''}
-                                      onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value))}
-                                      className="h-8"
-                                    />
-                                  </div>
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">
-                                      Actual Reps
-                                    </Label>
-                                    <Input
-                                      type="number"
-                                      value={exercise.actualReps[setIndex] || ''}
-                                      onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value))}
-                                      className="h-8"
-                                    />
+                            
+                            <div className="mb-4 flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => addSet(originalIndex)}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Add Set
+                              </Button>
+                              {exercise.currentSets > 0 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => removeSet(originalIndex)}
+                                >
+                                  <Minus className="h-4 w-4 mr-1" />
+                                  Remove Set
+                                </Button>
+                              )}
+                              <span className="text-sm text-muted-foreground">
+                                Current sets: {Math.max(exercise.plannedSets, exercise.currentSets)}
+                              </span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {Array.from({ length: Math.max(exercise.plannedSets, exercise.currentSets) }).map((_, setIndex) => (
+                                <div key={setIndex} className="border rounded p-3">
+                                  <Label className="text-sm font-medium mb-2 block">
+                                    Set {setIndex + 1}
+                                  </Label>
+                                  <div className="space-y-2">
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">
+                                        Weight ({weightUnit})
+                                      </Label>
+                                      <Input
+                                        type="number"
+                                        value={exercise.weights[setIndex] || ''}
+                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value))}
+                                        className="h-8"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">
+                                        Actual Reps
+                                      </Label>
+                                      <Input
+                                        type="number"
+                                        value={exercise.actualReps[setIndex] || ''}
+                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value))}
+                                        className="h-8"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
                           
                           <div className="mt-4 flex items-center gap-4">
                             <div className="flex items-center gap-2">
