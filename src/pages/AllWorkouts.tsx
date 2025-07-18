@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Users, Dumbbell, Play, Plus } from "lucide-react";
+import { Calendar, Users, Dumbbell, Play, Plus, Trash2, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -110,6 +110,32 @@ export function AllWorkouts() {
     }
   };
 
+  const handleDeleteCustomWorkout = async (workoutId: string) => {
+    try {
+      const { error } = await supabase
+        .from('custom_workouts')
+        .delete()
+        .eq('id', workoutId)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Workout deleted",
+        description: "Your custom workout has been deleted successfully.",
+      });
+
+      loadWorkouts(); // Refresh the list
+    } catch (error) {
+      console.error('Error deleting workout:', error);
+      toast({
+        title: "Error deleting workout",
+        description: "There was an error deleting your workout. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleStartPlan = async (workout: DefaultWorkout | CustomWorkout, workoutType: 'default' | 'custom') => {
     if (!user) return;
 
@@ -177,9 +203,37 @@ export function AllWorkouts() {
                 {workout.program_type}
               </Badge>
             </div>
-            {isCustom && (
-              <Badge variant="outline">Custom</Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {isCustom && (
+                <>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Custom Workout</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to delete this custom workout? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={() => handleDeleteCustomWorkout(workout.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <Badge variant="outline">Custom</Badge>
+                </>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -253,8 +307,15 @@ export function AllWorkouts() {
                   <Button 
                     variant="outline" 
                     className="w-full"
-                    onClick={() => navigate(`/workout-log/${workout.id}`)}
+                    onClick={() => {
+                      if (isCustom) {
+                        navigate(`/custom-plan-preview/${workout.id}`);
+                      } else {
+                        navigate(`/workout-log/${workout.id}`);
+                      }
+                    }}
                   >
+                    <Eye className="h-4 w-4 mr-2" />
                     Preview Workout
                   </Button>
                 </>

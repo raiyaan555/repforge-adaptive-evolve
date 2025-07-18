@@ -48,18 +48,20 @@ export function ProgramSelector({ onProgramStart, onDefaultWorkout }: ProgramSel
       </div>
 
       {/* Program Selection */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        {programs.map((program) => (
-          <ProgramCard
-            key={program.id}
-            title={program.title}
-            description={program.description}
-            features={program.features}
-            icon={program.icon}
-            isSelected={selectedProgram === program.id}
-            onSelect={() => setSelectedProgram(program.id)}
-          />
-        ))}
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-2xl">
+          {programs.map((program) => (
+            <ProgramCard
+              key={program.id}
+              title={program.title}
+              description={program.description}
+              features={program.features}
+              icon={program.icon}
+              isSelected={selectedProgram === program.id}
+              onSelect={() => setSelectedProgram(program.id)}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Duration Selection */}

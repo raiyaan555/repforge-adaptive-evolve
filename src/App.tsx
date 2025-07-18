@@ -15,6 +15,7 @@ import { AllWorkouts } from "./pages/AllWorkouts";
 import { MyStats } from "./pages/MyStats";
 import { MyAccount } from "./pages/MyAccount";
 import { CustomPlanBuilder } from "./pages/CustomPlanBuilder";
+import { CustomPlanPreview } from "./pages/CustomPlanPreview";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => (
               <Route path="/stats" element={<MyStats />} />
               <Route path="/account" element={<MyAccount />} />
               <Route path="/custom-plan-builder" element={<CustomPlanBuilder selectedProgram="" selectedDuration={6} onBack={() => {}} onPlanCreated={() => {}} />} />
+              <Route path="/custom-plan-preview/:workoutId" element={<CustomPlanPreview />} />
               <Route path="/workout-log/:workoutId" element={<WorkoutLog />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

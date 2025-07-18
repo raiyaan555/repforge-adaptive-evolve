@@ -29,8 +29,6 @@ const muscleGroups = [
 interface Exercise {
   id: string;
   name: string;
-  sets: number;
-  reps: string;
 }
 
 interface DayWorkout {
@@ -53,6 +51,20 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
   const [selectedDay, setSelectedDay] = useState("day1");
   const [restDays, setRestDays] = useState<Set<string>>(new Set());
   const [customExercises, setCustomExercises] = useState<Record<string, string[]>>({});
+  const [customExerciseDialog, setCustomExerciseDialog] = useState<{
+    isOpen: boolean;
+    day: string;
+    workoutIndex: number;
+    exerciseIndex: number;
+    muscleGroup: string;
+  }>({
+    isOpen: false,
+    day: "",
+    workoutIndex: 0,
+    exerciseIndex: 0,
+    muscleGroup: ""
+  });
+  const [customExerciseName, setCustomExerciseName] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -85,6 +97,53 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
       ...prev,
       [muscleGroup]: [...(prev[muscleGroup] || []), exerciseName]
     }));
+    
+    // Update the exercise list immediately
+    setExercisesByMuscleGroup(prev => ({
+      ...prev,
+      [muscleGroup]: [...(prev[muscleGroup] || []), { name: exerciseName }]
+    }));
+  };
+
+  const handleCustomExerciseSubmit = () => {
+    if (!customExerciseName.trim() || !customExerciseDialog.muscleGroup) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter both muscle group and exercise name",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const { day, workoutIndex, exerciseIndex, muscleGroup } = customExerciseDialog;
+    
+    // Add to custom exercises
+    addCustomExercise(muscleGroup, customExerciseName);
+    
+    // Update the exercise in the workout plan
+    setWorkoutPlan(prev => ({
+      ...prev,
+      [day]: prev[day]?.map((workout, i) => 
+        i === workoutIndex 
+          ? {
+              ...workout,
+              exercises: workout.exercises.map((exercise, ei) =>
+                ei === exerciseIndex ? { ...exercise, name: customExerciseName } : exercise
+              )
+            }
+          : workout
+      ) || []
+    }));
+
+    // Reset dialog
+    setCustomExerciseDialog({
+      isOpen: false,
+      day: "",
+      workoutIndex: 0,
+      exerciseIndex: 0,
+      muscleGroup: ""
+    });
+    setCustomExerciseName("");
   };
 
   const toggleRestDay = (day: string) => {
@@ -137,9 +196,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
   const addExercise = (day: string, workoutIndex: number) => {
     const newExercise: Exercise = {
       id: crypto.randomUUID(),
-      name: "",
-      sets: 3,
-      reps: "8-12"
+      name: ""
     };
 
     setWorkoutPlan(prev => ({
@@ -155,16 +212,14 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
   const updateExercise = (day: string, workoutIndex: number, exerciseIndex: number, field: keyof Exercise, value: string | number) => {
     // Handle custom exercise input
     if (value === "__custom__") {
-      const customName = prompt("Enter custom exercise name:");
-      if (customName) {
-        const workout = workoutPlan[day]?.[workoutIndex];
-        if (workout) {
-          addCustomExercise(workout.muscleGroup, customName);
-          value = customName;
-        }
-      } else {
-        return;
-      }
+      setCustomExerciseDialog({
+        isOpen: true,
+        day,
+        workoutIndex,
+        exerciseIndex,
+        muscleGroup: workoutPlan[day]?.[workoutIndex]?.muscleGroup || ""
+      });
+      return;
     }
 
     setWorkoutPlan(prev => ({
@@ -351,8 +406,8 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                         </div>
 
                         {workout.exercises.map((exercise, exerciseIndex) => (
-                          <div key={exercise.id} className="grid grid-cols-12 gap-2 items-center p-3 bg-muted rounded-lg">
-                            <div className="col-span-5">
+                          <div key={exercise.id} className="flex gap-2 items-center p-3 bg-muted rounded-lg">
+                            <div className="flex-1">
                               <Select 
                                 value={exercise.name} 
                                 onValueChange={(value) => updateExercise(day.id, workoutIndex, exerciseIndex, 'name', value)}
@@ -372,32 +427,13 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="col-span-2">
-                              <Input
-                                type="number"
-                                placeholder="Sets"
-                                value={exercise.sets}
-                                onChange={(e) => updateExercise(day.id, workoutIndex, exerciseIndex, 'sets', parseInt(e.target.value))}
-                                min="1"
-                                max="10"
-                              />
-                            </div>
-                            <div className="col-span-3">
-                              <Input
-                                placeholder="Reps (e.g., 8-12)"
-                                value={exercise.reps}
-                                onChange={(e) => updateExercise(day.id, workoutIndex, exerciseIndex, 'reps', e.target.value)}
-                              />
-                            </div>
-                            <div className="col-span-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => removeExercise(day.id, workoutIndex, exerciseIndex)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => removeExercise(day.id, workoutIndex, exerciseIndex)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         ))}
                       </div>
@@ -447,6 +483,67 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Custom Exercise Dialog */}
+      <Dialog open={customExerciseDialog.isOpen} onOpenChange={(open) => {
+        if (!open) {
+          setCustomExerciseDialog({
+            isOpen: false,
+            day: "",
+            workoutIndex: 0,
+            exerciseIndex: 0,
+            muscleGroup: ""
+          });
+          setCustomExerciseName("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Custom Exercise</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="muscleGroup">Muscle Group</Label>
+              <Input
+                id="muscleGroup"
+                value={customExerciseDialog.muscleGroup}
+                disabled
+                className="bg-muted"
+              />
+            </div>
+            <div>
+              <Label htmlFor="exerciseName">Exercise Name</Label>
+              <Input
+                id="exerciseName"
+                placeholder="Enter exercise name"
+                value={customExerciseName}
+                onChange={(e) => setCustomExerciseName(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setCustomExerciseDialog({
+                    isOpen: false,
+                    day: "",
+                    workoutIndex: 0,
+                    exerciseIndex: 0,
+                    muscleGroup: ""
+                  });
+                  setCustomExerciseName("");
+                }} 
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCustomExerciseSubmit} className="flex-1">
+                Add Exercise
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
