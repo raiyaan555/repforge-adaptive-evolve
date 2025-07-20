@@ -101,7 +101,7 @@ export function WorkoutLog() {
         .select('current_week, current_day')
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
-        .single();
+        .maybeSingle();
         
       if (activeWorkout) {
         console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
@@ -122,7 +122,7 @@ export function WorkoutLog() {
         .from('default_workouts')
         .select('*')
         .eq('id', workoutId)
-        .single();
+        .maybeSingle();
 
       if (!defaultWorkout) {
         const { data: customWorkout } = await supabase
@@ -130,7 +130,7 @@ export function WorkoutLog() {
           .select('*')
           .eq('id', workoutId)
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
         
         if (customWorkout) {
           defaultWorkout = customWorkout;
@@ -249,11 +249,14 @@ export function WorkoutLog() {
   };
 
   const handleMuscleGroupComplete = async (muscleGroup: string) => {
+    console.log('Starting muscle group completion for:', muscleGroup);
     const exercises = getMuscleGroupExercises(muscleGroup);
+    console.log('Exercises for muscle group:', exercises);
     
     // Check for soreness feedback if muscle group has been trained before
     await checkSorenessPrompt(muscleGroup);
     
+    console.log('Opening feedback modal for:', muscleGroup);
     setFeedbackModal({
       isOpen: true,
       muscleGroup,
@@ -264,6 +267,9 @@ export function WorkoutLog() {
   const saveMuscleGroupFeedback = async () => {
     try {
       const { muscleGroup, exercises } = feedbackModal;
+      console.log('Saving feedback for muscle group:', muscleGroup);
+      console.log('Current completed muscle groups before:', Array.from(completedMuscleGroups));
+      console.log('All unique muscle groups:', getUniqueMuscleGroups());
       
       // Store feedback for this muscle group
       setMuscleGroupFeedbacks(prev => new Map(prev.set(muscleGroup, feedback)));
@@ -585,6 +591,9 @@ export function WorkoutLog() {
           {getUniqueMuscleGroups().map((muscleGroup) => {
             const exercises = getMuscleGroupExercises(muscleGroup);
             const isCompleted = exercises.every(ex => ex.completed);
+            const hasCompletedFeedback = completedMuscleGroups.has(muscleGroup);
+            
+            console.log(`Muscle group ${muscleGroup}: isCompleted=${isCompleted}, hasCompletedFeedback=${hasCompletedFeedback}, exercises:`, exercises.map(ex => ({name: ex.exercise, completed: ex.completed})));
             
             return (
               <Card key={muscleGroup} className="w-full">
@@ -593,13 +602,14 @@ export function WorkoutLog() {
                     <CardTitle className="flex items-center gap-2">
                       {muscleGroup}
                       {isCompleted && <Badge variant="default">Completed</Badge>}
+                      {hasCompletedFeedback && <Badge variant="secondary">Feedback Given</Badge>}
                     </CardTitle>
                     <Button
                       onClick={() => handleMuscleGroupComplete(muscleGroup)}
-                      disabled={!isCompleted}
+                      disabled={!isCompleted || hasCompletedFeedback}
                       variant="outline"
                     >
-                      Complete Muscle Group
+                      {hasCompletedFeedback ? 'Feedback Complete' : 'Complete Muscle Group'}
                     </Button>
                   </div>
                 </CardHeader>
