@@ -86,6 +86,7 @@ export function WorkoutLog() {
   useEffect(() => {
     // Re-initialize workout logs when currentDay changes
     if (workout && currentDay) {
+      console.log('Reinitializing workout logs for day:', currentDay);
       initializeWorkoutLogs(workout);
       // Reset muscle group completion state for new day
       setCompletedMuscleGroups(new Set());
@@ -103,6 +104,7 @@ export function WorkoutLog() {
         .single();
         
       if (activeWorkout) {
+        console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
         setCurrentWeek(activeWorkout.current_week);
         setCurrentDay(activeWorkout.current_day);
       }
@@ -137,7 +139,7 @@ export function WorkoutLog() {
 
       if (defaultWorkout) {
         setWorkout(defaultWorkout);
-        initializeWorkoutLogs(defaultWorkout);
+        // Don't initialize logs here - wait until currentDay is loaded
       }
     } catch (error) {
       console.error('Error loading workout:', error);
