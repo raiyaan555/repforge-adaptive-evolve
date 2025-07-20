@@ -33,50 +33,33 @@ export function ProgramSelector({ onProgramStart, onDefaultWorkout }: ProgramSel
     <div className="container mx-auto px-4 py-16">
       <div className="text-center mb-12">
         <h2 className="text-4xl md:text-5xl font-bold mb-4">
-          Choose Your <span className="text-primary">Training Path</span>
+          Choose Your <span className="text-primary">Duration</span>
         </h2>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Select a program that matches your goals. Don't worry - RepForge will adapt as you progress.
+          How long do you want your workout plan to be?
         </p>
       </div>
 
-      {/* Program Selection */}
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="flex justify-center">
-          {programs.map((program) => (
-            <ProgramCard
-              key={program.id}
-              title={program.title}
-              description={program.description}
-              features={program.features}
-              icon={program.icon}
-              isSelected={selectedProgram === program.id}
-              onSelect={() => setSelectedProgram(program.id)}
-            />
-          ))}
-        </div>
+      {/* Duration Selection First */}
+      <div className="mb-12">
+        <DurationSelector
+          selectedDuration={selectedDuration}
+          onDurationSelect={(duration) => {
+            setSelectedDuration(duration);
+            setSelectedProgram("hypertrophy"); // Auto-select Hypertrophy
+          }}
+        />
       </div>
 
-      {/* Duration Selection */}
-      {selectedProgram && (
-        <div className="mb-12">
-          <DurationSelector
-            selectedDuration={selectedDuration}
-            onDurationSelect={setSelectedDuration}
-          />
-        </div>
-      )}
-
       {/* Workout Creation Options */}
-      {selectedProgram && (
+      {selectedProgram && selectedDuration && (
         <Card className="mb-8">
           <CardHeader>
             <CardTitle className="text-center">Choose Your Workout Style</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-center text-lg mb-6">
-              You've chosen <span className="font-semibold text-primary">{programs.find(p => p.id === selectedProgram)?.title}</span> for{" "}
-              <span className="font-semibold text-primary">{selectedDuration} weeks</span>.
+              You've chosen a <span className="font-semibold text-primary">{selectedDuration} week</span> Hypertrophy plan.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

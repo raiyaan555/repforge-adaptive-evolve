@@ -35,7 +35,7 @@ const Index = () => {
   }
 
   const handleGetStarted = () => {
-    setAppState("custom-builder");
+    setAppState("program-selector");
   };
 
   const handleProgramStart = (program: string, duration: number) => {
@@ -101,18 +101,25 @@ const Index = () => {
         <Hero onGetStarted={handleGetStarted} />
       )}
 
+      {appState === "program-selector" && (
+        <ProgramSelector 
+          onProgramStart={handleProgramStart} 
+          onDefaultWorkout={handleDefaultWorkout}
+        />
+      )}
+
       {appState === "custom-builder" && (
         <CustomPlanBuilder
-          selectedProgram="Hypertrophy"
+          selectedProgram={selectedProgram}
           selectedDuration={selectedDuration}
-          onBack={() => setAppState("hero")}
+          onBack={() => setAppState("program-selector")}
           onPlanCreated={handlePlanCreated}
         />
       )}
 
       {appState === "workout-library" && (
         <WorkoutLibrary
-          onBack={() => setAppState("hero")}
+          onBack={() => setAppState("program-selector")}
           onWorkoutSelected={handleWorkoutSelected}
         />
       )}
