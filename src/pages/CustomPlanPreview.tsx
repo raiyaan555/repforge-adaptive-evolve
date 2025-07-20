@@ -49,7 +49,7 @@ export function CustomPlanPreview() {
         description: "There was an error loading your workout. Please try again.",
         variant: "destructive"
       });
-      navigate('/all-workouts');
+      navigate('/workouts');
     } finally {
       setLoading(false);
     }
@@ -113,7 +113,7 @@ export function CustomPlanPreview() {
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <p className="text-muted-foreground">Workout not found</p>
-          <Button onClick={() => navigate('/all-workouts')} className="mt-4">
+          <Button onClick={() => navigate('/workouts')} className="mt-4">
             Back to All Workouts
           </Button>
         </div>
@@ -123,7 +123,7 @@ export function CustomPlanPreview() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Button variant="ghost" onClick={() => navigate('/all-workouts')} className="mb-4">
+      <Button variant="ghost" onClick={() => navigate('/workouts')} className="mb-4">
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back to All Workouts
       </Button>
