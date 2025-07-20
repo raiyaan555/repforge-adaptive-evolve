@@ -276,10 +276,11 @@ export function AllWorkouts() {
             </div>
 
             <div className="pt-3 space-y-2">
-              {activeWorkout ? (
+              {activeWorkout && activeWorkout.workout_id === workout.id ? (
                 <div className="text-center">
+                  <Badge variant="default" className="mb-2">Active</Badge>
                   <p className="text-sm text-muted-foreground mb-2">
-                    You have an active workout plan. End it to start a new one.
+                    End current mesocycle to start a new one
                   </p>
                   <Button 
                     variant="outline" 
@@ -287,6 +288,33 @@ export function AllWorkouts() {
                     onClick={() => navigate('/current-mesocycle')}
                   >
                     View Current Plan
+                  </Button>
+                </div>
+              ) : activeWorkout ? (
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    End current mesocycle to start a new one
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    disabled
+                  >
+                    Start Workout (Disabled)
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => {
+                      if (isCustom) {
+                        navigate(`/custom-plan-preview/${workout.id}`);
+                      } else {
+                        navigate(`/workout-log/${workout.id}`);
+                      }
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview Workout
                   </Button>
                 </div>
               ) : (
@@ -376,12 +404,13 @@ export function AllWorkouts() {
                 <Play className="h-5 w-5 text-primary" />
                 <span className="font-medium">You have an active workout plan</span>
               </div>
-              <Button 
-                variant="outline" 
-                onClick={() => navigate('/current-mesocycle')}
-              >
-                View Current Plan
-              </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => navigate('/current-mesocycle')}
+                  >
+                    View Current Plan
+                  </Button>
+                  <Badge variant="default" className="ml-2">Active</Badge>
             </div>
           </CardContent>
         </Card>

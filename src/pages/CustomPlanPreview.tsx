@@ -60,9 +60,12 @@ export function CustomPlanPreview() {
 
     const days = ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7', 'day8'];
     
+    // Only show days that exist in the workout structure
+    const existingDays = days.filter(dayKey => workout.workout_structure[dayKey] && workout.workout_structure[dayKey].length > 0);
+    
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {days.map(dayKey => {
+        {existingDays.map(dayKey => {
           const dayNumber = dayKey.replace('day', '');
           const dayWorkouts = workout.workout_structure[dayKey];
           
@@ -72,26 +75,20 @@ export function CustomPlanPreview() {
                 <CardTitle className="text-lg">Day {dayNumber}</CardTitle>
               </CardHeader>
               <CardContent>
-                {!dayWorkouts || dayWorkouts.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-muted-foreground">💤 Rest Day</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {dayWorkouts.map((workout: any, index: number) => (
-                      <div key={index}>
-                        <h4 className="font-medium text-primary mb-1">{workout.muscleGroup}</h4>
-                        <ul className="ml-2 space-y-1">
-                          {workout.exercises.map((exercise: any, exerciseIndex: number) => (
-                            <li key={exerciseIndex} className="text-sm text-muted-foreground">
-                              • {exercise.name.startsWith('Custom: ') ? exercise.name : exercise.name}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <div className="space-y-3">
+                  {dayWorkouts.map((workout: any, index: number) => (
+                    <div key={index}>
+                      <h4 className="font-medium text-primary mb-1">{workout.muscleGroup}</h4>
+                      <ul className="ml-2 space-y-1">
+                        {workout.exercises.map((exercise: any, exerciseIndex: number) => (
+                          <li key={exerciseIndex} className="text-sm text-muted-foreground">
+                            • {exercise.name}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           );

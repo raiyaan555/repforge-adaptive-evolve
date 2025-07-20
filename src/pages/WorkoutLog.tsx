@@ -156,18 +156,17 @@ export function WorkoutLog() {
       dayWorkout.forEach((muscleGroupData) => {
         if (muscleGroupData.exercises && Array.isArray(muscleGroupData.exercises)) {
           muscleGroupData.exercises.forEach((exercise) => {
-            // Initialize with defaults: 3 sets, 12 reps, RPE 7 (Week 1)
-            const defaultSets = currentWeek === 1 ? 3 : (exercise.sets || 3);
-            const defaultReps = currentWeek === 1 ? 12 : (exercise.reps || 12);
+            // Initialize with defaults: 1 set, empty reps/weight, RPE 7 (Week 1)
+            const defaultSets = 1;
             const defaultRpe = 7;
             
             logs.push({
               exercise: exercise.name,
               muscleGroup: muscleGroupData.muscleGroup,
               plannedSets: defaultSets,
-              plannedReps: defaultReps,
-              actualReps: Array(defaultSets).fill(defaultReps),
-              weights: Array(defaultSets).fill(0),
+              plannedReps: 0, // Empty, to be filled by user
+              actualReps: [0], // Start with one empty set
+              weights: [0], // Start with one empty set
               rir: defaultRpe,
               completed: false,
               currentSets: defaultSets
@@ -192,7 +191,7 @@ export function WorkoutLog() {
     
     // Ensure arrays are long enough
     while (updatedLogs[exerciseIndex].actualReps.length <= setIndex) {
-      updatedLogs[exerciseIndex].actualReps.push(12);
+      updatedLogs[exerciseIndex].actualReps.push(0);
     }
     while (updatedLogs[exerciseIndex].weights.length <= setIndex) {
       updatedLogs[exerciseIndex].weights.push(0);
@@ -212,7 +211,7 @@ export function WorkoutLog() {
   const addSet = (exerciseIndex: number) => {
     const updatedLogs = [...workoutLogs];
     updatedLogs[exerciseIndex].currentSets++;
-    updatedLogs[exerciseIndex].actualReps.push(12);
+    updatedLogs[exerciseIndex].actualReps.push(0);
     updatedLogs[exerciseIndex].weights.push(0);
     setWorkoutLogs(updatedLogs);
   };
@@ -602,26 +601,28 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Weight ({weightUnit})
                                       </Label>
-                                       <Input
-                                         type="number"
-                                         value={exercise.weights[setIndex] || 0}
-                                         onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value) || 0)}
-                                         className="h-8"
-                                         min="0"
-                                         step="0.5"
-                                       />
+                                        <Input
+                                          type="number"
+                                          value={exercise.weights[setIndex] || ''}
+                                          placeholder="e.g. 20 kg"
+                                          onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value) || 0)}
+                                          className="h-8"
+                                          min="0"
+                                          step="0.5"
+                                        />
                                     </div>
                                     <div>
                                       <Label className="text-xs text-muted-foreground">
                                         Actual Reps
                                       </Label>
-                                      <Input
-                                        type="number"
-                                        value={exercise.actualReps[setIndex] || 12}
-                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 12)}
-                                        className="h-8"
-                                        min="1"
-                                      />
+                                       <Input
+                                         type="number"
+                                         value={exercise.actualReps[setIndex] || ''}
+                                         placeholder="e.g. 12"
+                                         onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 0)}
+                                         className="h-8"
+                                         min="1"
+                                       />
                                     </div>
                                   </div>
                                 </div>
