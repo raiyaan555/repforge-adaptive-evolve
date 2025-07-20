@@ -262,6 +262,7 @@ export function WorkoutLog() {
       muscleGroup,
       exercises
     });
+    console.log('Feedback modal state set:', { isOpen: true, muscleGroup, exerciseCount: exercises.length });
   };
 
   const saveMuscleGroupFeedback = async () => {
@@ -725,6 +726,11 @@ export function WorkoutLog() {
               <DialogTitle>Muscle Group Feedback</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
+              {(() => {
+                console.log('Rendering feedback modal for muscle group:', feedbackModal.muscleGroup);
+                console.log('Modal isOpen:', feedbackModal.isOpen);
+                return null;
+              })()}
               {feedbackModal.muscleGroup.toLowerCase() === 'chest' && (
                 <div>
                   <Label className="text-sm font-medium mb-3 block">
@@ -754,7 +760,21 @@ export function WorkoutLog() {
                 </div>
               )}
 
-              <Button onClick={saveMuscleGroupFeedback} className="w-full">
+              {feedbackModal.muscleGroup.toLowerCase() !== 'chest' && (
+                <div>
+                  <Label className="text-sm font-medium mb-3 block">
+                    Complete {feedbackModal.muscleGroup} Workout
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Great job completing your {feedbackModal.muscleGroup} exercises! Click Save to finish this muscle group.
+                  </p>
+                </div>
+              )}
+
+              <Button onClick={() => {
+                console.log('Save Feedback button clicked for:', feedbackModal.muscleGroup);
+                saveMuscleGroupFeedback();
+              }} className="w-full">
                 Save Feedback
               </Button>
             </div>
