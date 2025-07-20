@@ -276,15 +276,13 @@ export function WorkoutLog() {
       setMuscleGroupFeedbacks(prev => new Map(prev.set(muscleGroup, feedback)));
       setCompletedMuscleGroups(prev => new Set(prev.add(muscleGroup)));
       
-      // Save pump feedback only for chest
-      if (muscleGroup.toLowerCase() === 'chest') {
-        await supabase.from('pump_feedback').insert({
-          user_id: user.id,
-          workout_date: new Date().toISOString().split('T')[0],
-          muscle_group: muscleGroup,
-          pump_level: feedback.pumpLevel
-        });
-      }
+      // Save pump feedback for all muscle groups
+      await supabase.from('pump_feedback').insert({
+        user_id: user.id,
+        workout_date: new Date().toISOString().split('T')[0],
+        muscle_group: muscleGroup,
+        pump_level: feedback.pumpLevel
+      });
       
       // Save workout logs to mesocycle table for this muscle group
       for (const exercise of exercises) {
@@ -731,45 +729,33 @@ export function WorkoutLog() {
                 console.log('Modal isOpen:', feedbackModal.isOpen);
                 return null;
               })()}
-              {feedbackModal.muscleGroup.toLowerCase() === 'chest' && (
-                <div>
-                  <Label className="text-sm font-medium mb-3 block">
-                    Pump Level for {feedbackModal.muscleGroup}
-                  </Label>
-                  <RadioGroup
-                    value={feedback.pumpLevel}
-                    onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="negligible" id="negligible" />
-                      <Label htmlFor="negligible">Negligible</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="low" id="low" />
-                      <Label htmlFor="low">Low</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="moderate" id="moderate" />
-                      <Label htmlFor="moderate">Moderate</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="amazing" id="amazing" />
-                      <Label htmlFor="amazing">Amazing</Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-              )}
+              <div>
+                <Label className="text-sm font-medium mb-3 block">
+                  How was the pump for {feedbackModal.muscleGroup}?
+                </Label>
+                <RadioGroup
+                  value={feedback.pumpLevel}
+                  onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="negligible" id="negligible" />
+                    <Label htmlFor="negligible">Negligible</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="low" id="low" />
+                    <Label htmlFor="low">Low</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="moderate" id="moderate" />
+                    <Label htmlFor="moderate">Moderate</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="amazing" id="amazing" />
+                    <Label htmlFor="amazing">Amazing</Label>
+                  </div>
+                </RadioGroup>
+              </div>
 
-              {feedbackModal.muscleGroup.toLowerCase() !== 'chest' && (
-                <div>
-                  <Label className="text-sm font-medium mb-3 block">
-                    Complete {feedbackModal.muscleGroup} Workout
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Great job completing your {feedbackModal.muscleGroup} exercises! Click Save to finish this muscle group.
-                  </p>
-                </div>
-              )}
 
               <Button onClick={() => {
                 console.log('Save Feedback button clicked for:', feedbackModal.muscleGroup);
