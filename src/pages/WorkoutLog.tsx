@@ -81,6 +81,13 @@ export function WorkoutLog() {
     }
   }, [user, workoutId]);
 
+  useEffect(() => {
+    // Re-initialize workout logs when currentDay changes
+    if (workout && currentDay) {
+      initializeWorkoutLogs(workout);
+    }
+  }, [currentDay, workout]);
+
   const loadActiveWorkoutInfo = async () => {
     try {
       const { data: activeWorkout } = await supabase
@@ -278,29 +285,36 @@ export function WorkoutLog() {
 
   const promptForSoreness = (muscleGroup: string): Promise<string | null> => {
     return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+      
       const dialog = document.createElement('div');
+      dialog.className = 'bg-background border border-border rounded-lg max-w-md mx-4 shadow-lg';
+      
       dialog.innerHTML = `
-        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-          <div style="background: white; padding: 24px; border-radius: 8px; max-width: 400px;">
-            <h3 style="margin-bottom: 16px;">How sore did you get after you worked out ${muscleGroup} last time?</h3>
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <button data-value="none" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">No soreness</button>
-              <button data-value="light" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Light soreness</button>
-              <button data-value="moderate" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Moderate soreness</button>
-              <button data-value="severe" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Severe soreness</button>
-            </div>
+        <div class="p-6">
+          <h3 class="text-lg font-semibold mb-4 text-foreground">How sore did you get after you worked out ${muscleGroup} last time?</h3>
+          <div class="space-y-2">
+            <button data-value="none" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">No soreness</button>
+            <button data-value="light" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Light soreness</button>
+            <button data-value="moderate" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Moderate soreness</button>
+            <button data-value="severe" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Severe soreness</button>
           </div>
         </div>
       `;
       
-      document.body.appendChild(dialog);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
       
-      dialog.addEventListener('click', (e) => {
+      overlay.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target.hasAttribute('data-value')) {
           const value = target.getAttribute('data-value');
-          document.body.removeChild(dialog);
+          document.body.removeChild(overlay);
           resolve(value);
+        } else if (e.target === overlay) {
+          document.body.removeChild(overlay);
+          resolve(null);
         }
       });
     });
