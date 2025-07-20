@@ -34,7 +34,7 @@ interface WorkoutLog {
   plannedReps: number;
   actualReps: number[];
   weights: number[];
-  rir?: number;
+  rpe?: number;
   completed: boolean;
   currentSets: number;
 }
@@ -167,7 +167,7 @@ export function WorkoutLog() {
               plannedReps: 0, // Empty, to be filled by user
               actualReps: [0], // Start with one empty set
               weights: [0], // Start with one empty set
-              rir: defaultRpe,
+              rpe: defaultRpe,
               completed: false,
               currentSets: defaultSets
             });
@@ -310,13 +310,15 @@ export function WorkoutLog() {
     try {
       const { muscleGroup, exercises } = feedbackModal;
       
-      // Save pump feedback
-      await supabase.from('pump_feedback').insert({
-        user_id: user.id,
-        workout_date: new Date().toISOString().split('T')[0],
-        muscle_group: muscleGroup,
-        pump_level: feedback.pumpLevel
-      });
+      // Save pump feedback only for chest
+      if (muscleGroup.toLowerCase() === 'chest') {
+        await supabase.from('pump_feedback').insert({
+          user_id: user.id,
+          workout_date: new Date().toISOString().split('T')[0],
+          muscle_group: muscleGroup,
+          pump_level: feedback.pumpLevel
+        });
+      }
       
       // Save workout logs to mesocycle table
       for (const exercise of exercises) {
@@ -334,7 +336,7 @@ export function WorkoutLog() {
           actual_reps: exercise.actualReps,
           weight_used: exercise.weights,
           weight_unit: weightUnit,
-          rir: exercise.rir,
+          rir: exercise.rpe,
           pump_level: feedback.pumpLevel,
           is_sore: feedback.isSore,
           can_add_sets: feedback.canAddSets,
@@ -362,9 +364,15 @@ export function WorkoutLog() {
         }
       });
 
-      // Update active workout - move to next day
-      const nextDay = currentDay < 8 ? currentDay + 1 : 1;
-      const nextWeek = currentDay < 8 ? currentWeek : currentWeek + 1;
+      // Update active workout - get max days from workout structure
+      const structure = workout.workout_structure;
+      const maxDays = Object.keys(structure).filter(dayKey => {
+        const dayWorkout = structure[dayKey];
+        return Array.isArray(dayWorkout) && dayWorkout.length > 0;
+      }).length;
+      
+      const nextDay = currentDay < maxDays ? currentDay + 1 : 1;
+      const nextWeek = currentDay < maxDays ? currentWeek : currentWeek + 1;
       
       await supabase
         .from('active_workouts')
@@ -553,9 +561,6 @@ export function WorkoutLog() {
                             <div className="flex items-center justify-between mb-4">
                               <h3 className="font-semibold">{exercise.exercise}</h3>
                               <div className="flex items-center gap-2">
-                                <Badge variant="outline">
-                                  {exercise.plannedSets} sets × {exercise.plannedReps} reps
-                                </Badge>
                                 <Button
                                   variant={exercise.completed ? "default" : "outline"}
                                   size="sm"
@@ -630,17 +635,17 @@ export function WorkoutLog() {
                             </div>
                           
                           <div className="mt-4 flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                              <Label className="text-sm">RIR (Optional):</Label>
-                              <Input
-                                type="number"
-                                value={exercise.rir || ''}
-                                onChange={(e) => updateWorkoutLog(originalIndex, 'rir', Number(e.target.value))}
-                                className="w-20 h-8"
-                                min="0"
-                                max="10"
-                              />
-                            </div>
+                             <div className="flex items-center gap-2">
+                               <Label className="text-sm">RPE (Optional):</Label>
+                               <Input
+                                 type="number"
+                                 value={exercise.rpe || ''}
+                                 onChange={(e) => updateWorkoutLog(originalIndex, 'rpe', Number(e.target.value))}
+                                 className="w-20 h-8"
+                                 min="1"
+                                 max="10"
+                               />
+                             </div>
                           </div>
                         </div>
                       );
@@ -658,50 +663,34 @@ export function WorkoutLog() {
               <DialogTitle>Muscle Group Feedback</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
-              <div>
-                <Label className="text-sm font-medium mb-3 block">
-                  Pump Level for {feedbackModal.muscleGroup}
-                </Label>
-                <RadioGroup
-                  value={feedback.pumpLevel}
-                  onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="negligible" id="negligible" />
-                    <Label htmlFor="negligible">Negligible</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="low" id="low" />
-                    <Label htmlFor="low">Low</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="moderate" id="moderate" />
-                    <Label htmlFor="moderate">Moderate</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="amazing" id="amazing" />
-                    <Label htmlFor="amazing">Amazing</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Are you still sore today?</Label>
-                  <Switch
-                    checked={feedback.isSore}
-                    onCheckedChange={(checked) => setFeedback(prev => ({ ...prev, isSore: checked }))}
-                  />
+              {feedbackModal.muscleGroup.toLowerCase() === 'chest' && (
+                <div>
+                  <Label className="text-sm font-medium mb-3 block">
+                    Pump Level for {feedbackModal.muscleGroup}
+                  </Label>
+                  <RadioGroup
+                    value={feedback.pumpLevel}
+                    onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="negligible" id="negligible" />
+                      <Label htmlFor="negligible">Negligible</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="low" id="low" />
+                      <Label htmlFor="low">Low</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="moderate" id="moderate" />
+                      <Label htmlFor="moderate">Moderate</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="amazing" id="amazing" />
+                      <Label htmlFor="amazing">Amazing</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label>Can you add more sets?</Label>
-                  <Switch
-                    checked={feedback.canAddSets}
-                    onCheckedChange={(checked) => setFeedback(prev => ({ ...prev, canAddSets: checked }))}
-                  />
-                </div>
-              </div>
+              )}
 
               <Button onClick={saveFeedback} className="w-full">
                 Save Feedback
