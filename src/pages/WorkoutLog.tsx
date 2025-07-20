@@ -66,6 +66,8 @@ export function WorkoutLog() {
     isSore: false,
     canAddSets: false
   });
+  const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
+  const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,6 +87,9 @@ export function WorkoutLog() {
     // Re-initialize workout logs when currentDay changes
     if (workout && currentDay) {
       initializeWorkoutLogs(workout);
+      // Reset muscle group completion state for new day
+      setCompletedMuscleGroups(new Set());
+      setMuscleGroupFeedbacks(new Map());
     }
   }, [currentDay, workout]);
 
@@ -254,6 +259,150 @@ export function WorkoutLog() {
     });
   };
 
+  const saveMuscleGroupFeedback = async () => {
+    try {
+      const { muscleGroup, exercises } = feedbackModal;
+      
+      // Store feedback for this muscle group
+      setMuscleGroupFeedbacks(prev => new Map(prev.set(muscleGroup, feedback)));
+      setCompletedMuscleGroups(prev => new Set(prev.add(muscleGroup)));
+      
+      // Save pump feedback only for chest
+      if (muscleGroup.toLowerCase() === 'chest') {
+        await supabase.from('pump_feedback').insert({
+          user_id: user.id,
+          workout_date: new Date().toISOString().split('T')[0],
+          muscle_group: muscleGroup,
+          pump_level: feedback.pumpLevel
+        });
+      }
+      
+      // Save workout logs to mesocycle table for this muscle group
+      for (const exercise of exercises) {
+        await supabase.from('mesocycle').insert({
+          user_id: user.id,
+          plan_id: workoutId,
+          workout_name: workout.name,
+          week_number: currentWeek,
+          day_number: currentDay,
+          exercise_name: exercise.exercise,
+          muscle_group: exercise.muscleGroup,
+          planned_sets: exercise.plannedSets,
+          planned_reps: exercise.plannedReps,
+          actual_sets: exercise.actualReps.length,
+          actual_reps: exercise.actualReps,
+          weight_used: exercise.weights,
+          weight_unit: weightUnit,
+          rir: exercise.rpe,
+          pump_level: feedback.pumpLevel,
+          is_sore: feedback.isSore,
+          can_add_sets: feedback.canAddSets,
+          feedback_given: true
+        });
+      }
+
+      // Apply progression algorithm for this muscle group
+      await applyProgressionAlgorithm(muscleGroup, exercises);
+
+      setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
+      
+      // Check if all muscle groups for the day are completed
+      const allMuscleGroups = getUniqueMuscleGroups();
+      const updatedCompletedGroups = new Set(completedMuscleGroups).add(muscleGroup);
+      
+      if (updatedCompletedGroups.size === allMuscleGroups.length) {
+        // All muscle groups completed, end the workout day
+        await completeWorkoutDay();
+      } else {
+        toast({
+          title: "Muscle Group Complete! 💪",
+          description: `${muscleGroup} completed. Complete remaining muscle groups to finish the day.`
+        });
+      }
+    } catch (error) {
+      console.error('Error saving muscle group feedback:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save muscle group feedback",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const completeWorkoutDay = async () => {
+    try {
+      // Mark workout as completed in calendar
+      await supabase.from('workout_calendar').insert({
+        user_id: user.id,
+        workout_date: new Date().toISOString().split('T')[0],
+        status: 'completed',
+        workout_summary: {
+          exercises: workoutLogs.map(ex => ({
+            name: ex.exercise,
+            sets: ex.actualReps.length,
+            reps: ex.actualReps,
+            weights: ex.weights
+          })),
+          feedback: Array.from(muscleGroupFeedbacks.entries()).map(([mg, fb]) => ({
+            muscle_group: mg,
+            pump_level: fb.pumpLevel,
+            is_sore: fb.isSore,
+            can_add_sets: fb.canAddSets
+          }))
+        }
+      });
+
+      // Update active workout - get max days from workout structure
+      const structure = workout.workout_structure;
+      const maxDays = Object.keys(structure).filter(dayKey => {
+        const dayWorkout = structure[dayKey];
+        return Array.isArray(dayWorkout) && dayWorkout.length > 0;
+      }).length;
+      
+      const nextDay = currentDay < maxDays ? currentDay + 1 : 1;
+      const nextWeek = currentDay < maxDays ? currentWeek : currentWeek + 1;
+      
+      await supabase
+        .from('active_workouts')
+        .update({
+          current_day: nextDay,
+          current_week: nextWeek,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId);
+
+      // Check if mesocycle is complete
+      if (nextWeek > workout.duration_weeks) {
+        toast({
+          title: "Mesocycle Complete! 🎉",
+          description: "Congratulations! You've completed your workout plan."
+        });
+        // End the workout
+        await supabase
+          .from('active_workouts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('workout_id', workoutId);
+      } else {
+        toast({
+          title: "Day Complete! 🎉",
+          description: `Great job! Moving to Day ${nextDay}, Week ${nextWeek}`
+        });
+      }
+      
+      // Navigate back to current mesocycle
+      navigate('/current-mesocycle');
+    } catch (error) {
+      console.error('Error completing workout day:', error);
+      toast({
+        title: "Error",
+        description: "Failed to complete workout day",
+        variant: "destructive"
+      });
+    }
+  };
+
   const checkSorenessPrompt = async (muscleGroup: string) => {
     try {
       // Check if this muscle group has been trained before
@@ -320,119 +469,6 @@ export function WorkoutLog() {
     });
   };
 
-  const saveFeedback = async () => {
-    try {
-      const { muscleGroup, exercises } = feedbackModal;
-      
-      // Save pump feedback only for chest
-      if (muscleGroup.toLowerCase() === 'chest') {
-        await supabase.from('pump_feedback').insert({
-          user_id: user.id,
-          workout_date: new Date().toISOString().split('T')[0],
-          muscle_group: muscleGroup,
-          pump_level: feedback.pumpLevel
-        });
-      }
-      
-      // Save workout logs to mesocycle table
-      for (const exercise of exercises) {
-        await supabase.from('mesocycle').insert({
-          user_id: user.id,
-          plan_id: workoutId,
-          workout_name: workout.name,
-          week_number: currentWeek,
-          day_number: currentDay,
-          exercise_name: exercise.exercise,
-          muscle_group: exercise.muscleGroup,
-          planned_sets: exercise.plannedSets,
-          planned_reps: exercise.plannedReps,
-          actual_sets: exercise.actualReps.length,
-          actual_reps: exercise.actualReps,
-          weight_used: exercise.weights,
-          weight_unit: weightUnit,
-          rir: exercise.rpe,
-          pump_level: feedback.pumpLevel,
-          is_sore: feedback.isSore,
-          can_add_sets: feedback.canAddSets,
-          feedback_given: true
-        });
-      }
-
-      // Mark workout as completed in calendar
-      await supabase.from('workout_calendar').insert({
-        user_id: user.id,
-        workout_date: new Date().toISOString().split('T')[0],
-        status: 'completed',
-        workout_summary: {
-          exercises: exercises.map(ex => ({
-            name: ex.exercise,
-            sets: ex.actualReps.length,
-            reps: ex.actualReps,
-            weights: ex.weights
-          })),
-          feedback: {
-            pump_level: feedback.pumpLevel,
-            is_sore: feedback.isSore,
-            can_add_sets: feedback.canAddSets
-          }
-        }
-      });
-
-      // Update active workout - get max days from workout structure
-      const structure = workout.workout_structure;
-      const maxDays = Object.keys(structure).filter(dayKey => {
-        const dayWorkout = structure[dayKey];
-        return Array.isArray(dayWorkout) && dayWorkout.length > 0;
-      }).length;
-      
-      const nextDay = currentDay < maxDays ? currentDay + 1 : 1;
-      const nextWeek = currentDay < maxDays ? currentWeek : currentWeek + 1;
-      
-      await supabase
-        .from('active_workouts')
-        .update({
-          current_day: nextDay,
-          current_week: nextWeek,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.id)
-        .eq('workout_id', workoutId);
-
-      // Apply progression algorithm
-      await applyProgressionAlgorithm(muscleGroup, exercises);
-
-      // Check if mesocycle is complete
-      if (nextWeek > workout.duration_weeks) {
-        toast({
-          title: "Mesocycle Complete! 🎉",
-          description: "Congratulations! You've completed your workout plan."
-        });
-        // End the workout
-        await supabase
-          .from('active_workouts')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('workout_id', workoutId);
-      } else {
-        toast({
-          title: "Muscle Group Complete! 💪",
-          description: `Great job! Moving to Day ${nextDay}, Week ${nextWeek}`
-        });
-      }
-
-      setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
-      
-      // Navigate back to current mesocycle
-      navigate('/current-mesocycle');
-    } catch (error) {
-      console.error('Error saving feedback:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save workout feedback",
-        variant: "destructive"
-      });
-    }
-  };
 
   const applyProgressionAlgorithm = async (muscleGroup: string, exercises: WorkoutLog[]) => {
     try {
@@ -706,7 +742,7 @@ export function WorkoutLog() {
                 </div>
               )}
 
-              <Button onClick={saveFeedback} className="w-full">
+              <Button onClick={saveMuscleGroupFeedback} className="w-full">
                 Save Feedback
               </Button>
             </div>
