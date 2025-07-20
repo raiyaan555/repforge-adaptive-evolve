@@ -136,8 +136,18 @@ export function CurrentMesocycle() {
     const structure = workoutDetails.workout_structure;
     const weekExercises = [];
     
-    for (let day = 1; day <= 8; day++) {
-      const dayKey = `day${day}`;
+    // Only show days that actually exist in the workout structure
+    const existingDays = Object.keys(structure).filter(dayKey => {
+      const dayWorkout = structure[dayKey];
+      return Array.isArray(dayWorkout) && dayWorkout.length > 0;
+    }).sort((a, b) => {
+      const dayA = parseInt(a.replace('day', ''));
+      const dayB = parseInt(b.replace('day', ''));
+      return dayA - dayB;
+    });
+    
+    existingDays.forEach(dayKey => {
+      const dayNumber = parseInt(dayKey.replace('day', ''));
       const dayWorkout = structure[dayKey] || [];
       const dayExercises: any[] = [];
       
@@ -155,11 +165,11 @@ export function CurrentMesocycle() {
       }
       
       weekExercises.push({
-        day,
+        day: dayNumber,
         exercises: dayExercises,
-        isRestDay: dayExercises.length === 0
+        isRestDay: false // Since we only show days with content, none are rest days
       });
-    }
+    });
     
     return weekExercises;
   };
@@ -176,8 +186,8 @@ export function CurrentMesocycle() {
       if (error) throw error;
 
       toast({
-        title: "Workout ended",
-        description: "Your current workout has been ended successfully.",
+        title: "Mesocycle ended",
+        description: "Your current mesocycle has been ended successfully.",
       });
 
       setActiveWorkout(null);
@@ -186,8 +196,8 @@ export function CurrentMesocycle() {
     } catch (error) {
       console.error('Error ending workout:', error);
       toast({
-        title: "Error ending workout",
-        description: "There was an error ending your workout. Please try again.",
+        title: "Error ending mesocycle",
+        description: "There was an error ending your mesocycle. Please try again.",
         variant: "destructive"
       });
     }
@@ -248,19 +258,19 @@ export function CurrentMesocycle() {
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm">
               <Square className="h-4 w-4 mr-2" />
-              End Workout
+              End Mesocycle
             </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>End Current Workout?</AlertDialogTitle>
+              <AlertDialogTitle>End Current Mesocycle?</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to end your current workout plan? This will remove it from your active mesocycle and you'll need to start a new plan to continue tracking.
+                Are you sure you want to end your current mesocycle? This will remove it from your active workout and you'll need to start a new plan to continue tracking.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleEndWorkout}>End Workout</AlertDialogAction>
+              <AlertDialogAction onClick={handleEndWorkout}>End Mesocycle</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
