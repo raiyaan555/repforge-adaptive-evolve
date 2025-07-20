@@ -218,6 +218,39 @@ export type Database = {
         }
         Relationships: []
       }
+      muscle_soreness: {
+        Row: {
+          created_at: string
+          healed: boolean
+          id: string
+          muscle_group: string
+          soreness_level: string
+          updated_at: string
+          user_id: string
+          workout_date: string
+        }
+        Insert: {
+          created_at?: string
+          healed?: boolean
+          id?: string
+          muscle_group: string
+          soreness_level: string
+          updated_at?: string
+          user_id: string
+          workout_date?: string
+        }
+        Update: {
+          created_at?: string
+          healed?: boolean
+          id?: string
+          muscle_group?: string
+          soreness_level?: string
+          updated_at?: string
+          user_id?: string
+          workout_date?: string
+        }
+        Relationships: []
+      }
       plans: {
         Row: {
           created_at: string
@@ -290,6 +323,36 @@ export type Database = {
           unit_preference?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      pump_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          muscle_group: string
+          pump_level: string
+          updated_at: string
+          user_id: string
+          workout_date: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          muscle_group: string
+          pump_level: string
+          updated_at?: string
+          user_id: string
+          workout_date?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          muscle_group?: string
+          pump_level?: string
+          updated_at?: string
+          user_id?: string
+          workout_date?: string
         }
         Relationships: []
       }

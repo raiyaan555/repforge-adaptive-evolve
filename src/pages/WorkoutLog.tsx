@@ -156,16 +156,21 @@ export function WorkoutLog() {
       dayWorkout.forEach((muscleGroupData) => {
         if (muscleGroupData.exercises && Array.isArray(muscleGroupData.exercises)) {
           muscleGroupData.exercises.forEach((exercise) => {
+            // Initialize with defaults: 3 sets, 12 reps, RPE 7 (Week 1)
+            const defaultSets = currentWeek === 1 ? 3 : (exercise.sets || 3);
+            const defaultReps = currentWeek === 1 ? 12 : (exercise.reps || 12);
+            const defaultRpe = 7;
+            
             logs.push({
               exercise: exercise.name,
               muscleGroup: muscleGroupData.muscleGroup,
-              plannedSets: exercise.sets,
-              plannedReps: exercise.reps,
-              actualReps: [],
-              weights: [],
-              rir: 0,
+              plannedSets: defaultSets,
+              plannedReps: defaultReps,
+              actualReps: Array(defaultSets).fill(defaultReps),
+              weights: Array(defaultSets).fill(0),
+              rir: defaultRpe,
               completed: false,
-              currentSets: 0
+              currentSets: defaultSets
             });
           });
         }
@@ -187,16 +192,19 @@ export function WorkoutLog() {
     
     // Ensure arrays are long enough
     while (updatedLogs[exerciseIndex].actualReps.length <= setIndex) {
-      updatedLogs[exerciseIndex].actualReps.push(0);
+      updatedLogs[exerciseIndex].actualReps.push(12);
     }
     while (updatedLogs[exerciseIndex].weights.length <= setIndex) {
       updatedLogs[exerciseIndex].weights.push(0);
     }
     
+    // Prevent NaN values - enforce zero as fallback
+    const safeValue = isNaN(value) || value < 0 ? 0 : value;
+    
     if (field === 'reps') {
-      updatedLogs[exerciseIndex].actualReps[setIndex] = value;
+      updatedLogs[exerciseIndex].actualReps[setIndex] = safeValue;
     } else {
-      updatedLogs[exerciseIndex].weights[setIndex] = value;
+      updatedLogs[exerciseIndex].weights[setIndex] = safeValue;
     }
     setWorkoutLogs(updatedLogs);
   };
@@ -204,7 +212,7 @@ export function WorkoutLog() {
   const addSet = (exerciseIndex: number) => {
     const updatedLogs = [...workoutLogs];
     updatedLogs[exerciseIndex].currentSets++;
-    updatedLogs[exerciseIndex].actualReps.push(0);
+    updatedLogs[exerciseIndex].actualReps.push(12);
     updatedLogs[exerciseIndex].weights.push(0);
     setWorkoutLogs(updatedLogs);
   };
@@ -227,8 +235,12 @@ export function WorkoutLog() {
     return Array.from(new Set(workoutLogs.map(log => log.muscleGroup)));
   };
 
-  const handleMuscleGroupComplete = (muscleGroup: string) => {
+  const handleMuscleGroupComplete = async (muscleGroup: string) => {
     const exercises = getMuscleGroupExercises(muscleGroup);
+    
+    // Check for soreness feedback if muscle group has been trained before
+    await checkSorenessPrompt(muscleGroup);
+    
     setFeedbackModal({
       isOpen: true,
       muscleGroup,
@@ -236,9 +248,76 @@ export function WorkoutLog() {
     });
   };
 
+  const checkSorenessPrompt = async (muscleGroup: string) => {
+    try {
+      // Check if this muscle group has been trained before
+      const { data: previousTraining } = await supabase
+        .from('mesocycle')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('muscle_group', muscleGroup)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (previousTraining && previousTraining.length > 0) {
+        // Prompt for soreness feedback
+        const sorenessLevel = await promptForSoreness(muscleGroup);
+        if (sorenessLevel) {
+          await supabase.from('muscle_soreness').insert({
+            user_id: user.id,
+            workout_date: new Date().toISOString().split('T')[0],
+            muscle_group: muscleGroup,
+            soreness_level: sorenessLevel,
+            healed: sorenessLevel === 'none'
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking soreness:', error);
+    }
+  };
+
+  const promptForSoreness = (muscleGroup: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const dialog = document.createElement('div');
+      dialog.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+          <div style="background: white; padding: 24px; border-radius: 8px; max-width: 400px;">
+            <h3 style="margin-bottom: 16px;">How sore did you get after you worked out ${muscleGroup} last time?</h3>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <button data-value="none" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">No soreness</button>
+              <button data-value="light" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Light soreness</button>
+              <button data-value="moderate" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Moderate soreness</button>
+              <button data-value="severe" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">Severe soreness</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(dialog);
+      
+      dialog.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.hasAttribute('data-value')) {
+          const value = target.getAttribute('data-value');
+          document.body.removeChild(dialog);
+          resolve(value);
+        }
+      });
+    });
+  };
+
   const saveFeedback = async () => {
     try {
       const { muscleGroup, exercises } = feedbackModal;
+      
+      // Save pump feedback
+      await supabase.from('pump_feedback').insert({
+        user_id: user.id,
+        workout_date: new Date().toISOString().split('T')[0],
+        muscle_group: muscleGroup,
+        pump_level: feedback.pumpLevel
+      });
       
       // Save workout logs to mesocycle table
       for (const exercise of exercises) {
@@ -298,16 +377,30 @@ export function WorkoutLog() {
         .eq('user_id', user.id)
         .eq('workout_id', workoutId);
 
-      // Apply progression algorithm if moving to new week
-      if (nextWeek > currentWeek) {
-        await applyProgressionAlgorithm(muscleGroup, exercises);
+      // Apply progression algorithm
+      await applyProgressionAlgorithm(muscleGroup, exercises);
+
+      // Check if mesocycle is complete
+      if (nextWeek > workout.duration_weeks) {
+        toast({
+          title: "Mesocycle Complete! 🎉",
+          description: "Congratulations! You've completed your workout plan."
+        });
+        // End the workout
+        await supabase
+          .from('active_workouts')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('workout_id', workoutId);
+      } else {
+        toast({
+          title: "Muscle Group Complete! 💪",
+          description: `Great job! Moving to Day ${nextDay}, Week ${nextWeek}`
+        });
       }
 
-      toast({
-        title: "Workout Complete! 🎉",
-        description: `Great job! Moving to Day ${nextDay}, Week ${nextWeek}`
-      });
-
+      setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
+      
       // Navigate back to current mesocycle
       navigate('/current-mesocycle');
     } catch (error) {
@@ -321,27 +414,59 @@ export function WorkoutLog() {
   };
 
   const applyProgressionAlgorithm = async (muscleGroup: string, exercises: WorkoutLog[]) => {
-    const { pumpLevel, isSore, canAddSets } = feedback;
-    let setsAdjustment = 0;
+    try {
+      const { pumpLevel } = feedback;
+      
+      // Get soreness data for this muscle group
+      const { data: sorenessData } = await supabase
+        .from('muscle_soreness')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('muscle_group', muscleGroup)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    // Progression algorithm
-    if (pumpLevel === 'negligible' || pumpLevel === 'low') {
-      if (!isSore) {
-        setsAdjustment = 3;
-      } else {
-        setsAdjustment = 1;
+      const isHealed = sorenessData?.[0]?.healed || true;
+      let setsAdjustment = 0;
+
+      // Adaptive algorithm based on pump and soreness
+      if (pumpLevel === 'negligible' || pumpLevel === 'low') {
+        setsAdjustment = isHealed ? 3 : 1;
+      } else if (pumpLevel === 'moderate') {
+        setsAdjustment = isHealed ? 2 : 1;
+      } else if (pumpLevel === 'amazing') {
+        setsAdjustment = isHealed ? 1 : 0;
       }
-    } else if (pumpLevel === 'moderate') {
-      setsAdjustment = isSore ? 1 : 2;
-    } else if (pumpLevel === 'amazing') {
-      setsAdjustment = isSore ? 0 : 1;
-    }
 
-    // Update workout structure for next week
-    if (setsAdjustment > 0) {
-      // This would typically update the workout plan for next week
-      // For now, we'll just log the adjustment
-      console.log(`Adjusting ${muscleGroup} by ${setsAdjustment} sets for next week`);
+      // For final week, reduce to 1/3 of second last week
+      if (currentWeek === workout.duration_weeks - 1) {
+        setsAdjustment = Math.max(1, Math.floor(exercises[0]?.plannedSets / 3));
+      }
+
+      // Weight and rep progression
+      for (const exercise of exercises) {
+        const avgReps = exercise.actualReps.reduce((sum, reps) => sum + reps, 0) / exercise.actualReps.length;
+        const avgWeight = exercise.weights.reduce((sum, weight) => sum + weight, 0) / exercise.weights.length;
+        
+        let newWeight = avgWeight;
+        let newReps = exercise.plannedReps;
+        
+        // If user matched target reps, increase weight
+        if (avgReps >= exercise.plannedReps) {
+          newWeight += 2.5; // Increase by 2.5 lbs/kg
+        }
+        
+        // If user exceeded reps significantly, increase reps for next week
+        if (avgReps > exercise.plannedReps + 2) {
+          newReps += 1;
+        }
+
+        console.log(`Progression for ${exercise.exercise}: +${setsAdjustment} sets, ${newReps} reps, ${newWeight}${weightUnit}`);
+      }
+      
+      console.log(`Applied progression algorithm: ${muscleGroup} +${setsAdjustment} sets`);
+    } catch (error) {
+      console.error('Error applying progression algorithm:', error);
     }
   };
 
@@ -477,12 +602,14 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Weight ({weightUnit})
                                       </Label>
-                                      <Input
-                                        type="number"
-                                        value={exercise.weights[setIndex] || ''}
-                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value))}
-                                        className="h-8"
-                                      />
+                                       <Input
+                                         type="number"
+                                         value={exercise.weights[setIndex] || 0}
+                                         onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value) || 0)}
+                                         className="h-8"
+                                         min="0"
+                                         step="0.5"
+                                       />
                                     </div>
                                     <div>
                                       <Label className="text-xs text-muted-foreground">
@@ -490,9 +617,10 @@ export function WorkoutLog() {
                                       </Label>
                                       <Input
                                         type="number"
-                                        value={exercise.actualReps[setIndex] || ''}
-                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value))}
+                                        value={exercise.actualReps[setIndex] || 12}
+                                        onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 12)}
                                         className="h-8"
+                                        min="1"
                                       />
                                     </div>
                                   </div>

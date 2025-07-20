@@ -75,9 +75,23 @@ export function CurrentMesocycle() {
           .from(tableName)
           .select('*')
           .eq('id', activeData.workout_id)
-          .single();
+          .maybeSingle();
 
-        if (workoutError) throw workoutError;
+        if (workoutError || !workoutData) {
+          // Workout no longer exists, clean up active workout
+          await supabase
+            .from('active_workouts')
+            .delete()
+            .eq('id', activeData.id);
+          
+          toast({
+            title: "Workout not found",
+            description: "Your active workout was removed because the plan no longer exists.",
+            variant: "destructive"
+          });
+          setActiveWorkout(null);
+          return;
+        }
         
         setWorkoutDetails(workoutData);
         loadCurrentDayExercises(workoutData, activeData.current_day);
@@ -200,24 +214,24 @@ export function CurrentMesocycle() {
   if (!activeWorkout || !workoutDetails) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <div className="text-center max-w-2xl mx-auto">
-          <div className="mb-8">
-            <CalendarDays className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h1 className="text-3xl font-bold mb-4">No Active Mesocycle</h1>
-            <p className="text-lg text-muted-foreground mb-8">
-              You don't have an active workout plan. Start a new mesocycle to begin tracking your progress.
-            </p>
-          </div>
-          
-          <Button 
-            size="lg" 
-            onClick={() => navigate('/workouts')}
-            className="px-8"
-          >
-            <Dumbbell className="h-5 w-5 mr-2" />
-            Browse Workouts
-          </Button>
+      <div className="text-center max-w-2xl mx-auto">
+        <div className="mb-8">
+          <CalendarDays className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+          <h1 className="text-3xl font-bold mb-4">No Active Mesocycle</h1>
+          <p className="text-lg text-muted-foreground mb-8">
+            You don't have an active workout right now.
+          </p>
         </div>
+        
+        <Button 
+          size="lg" 
+          onClick={() => navigate('/workouts')}
+          className="px-8"
+        >
+          <Dumbbell className="h-5 w-5 mr-2" />
+          Start a New Plan
+        </Button>
+      </div>
       </div>
     );
   }

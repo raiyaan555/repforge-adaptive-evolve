@@ -60,39 +60,44 @@ export function CustomPlanPreview() {
 
     const days = ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7', 'day8'];
     
-    return days.map(dayKey => {
-      const dayNumber = dayKey.replace('day', '');
-      const dayWorkouts = workout.workout_structure[dayKey];
-      
-      if (!dayWorkouts || dayWorkouts.length === 0) {
-        return (
-          <div key={dayKey} className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">Day {dayNumber}:</h3>
-            <p className="text-muted-foreground ml-4">Rest Day</p>
-          </div>
-        );
-      }
-      
-      return (
-        <div key={dayKey} className="mb-6">
-          <h3 className="text-lg font-semibold mb-3">Day {dayNumber}:</h3>
-          <div className="ml-4 space-y-2">
-            {dayWorkouts.map((workout: any, index: number) => (
-              <div key={index}>
-                <h4 className="font-medium text-primary">{workout.muscleGroup}</h4>
-                <ul className="ml-4 space-y-1">
-                  {workout.exercises.map((exercise: any, exerciseIndex: number) => (
-                    <li key={exerciseIndex} className="text-muted-foreground">
-                      {exercise.name.startsWith('Custom: ') ? exercise.name : `– ${exercise.name}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    });
+    return (
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {days.map(dayKey => {
+          const dayNumber = dayKey.replace('day', '');
+          const dayWorkouts = workout.workout_structure[dayKey];
+          
+          return (
+            <Card key={dayKey} className="h-fit">
+              <CardHeader>
+                <CardTitle className="text-lg">Day {dayNumber}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {!dayWorkouts || dayWorkouts.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-muted-foreground">💤 Rest Day</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {dayWorkouts.map((workout: any, index: number) => (
+                      <div key={index}>
+                        <h4 className="font-medium text-primary mb-1">{workout.muscleGroup}</h4>
+                        <ul className="ml-2 space-y-1">
+                          {workout.exercises.map((exercise: any, exerciseIndex: number) => (
+                            <li key={exerciseIndex} className="text-sm text-muted-foreground">
+                              • {exercise.name.startsWith('Custom: ') ? exercise.name : exercise.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    );
   };
 
   if (loading) {
@@ -155,12 +160,10 @@ export function CustomPlanPreview() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Week 1 Preview</CardTitle>
+          <CardTitle>Workout Plan Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {renderWorkoutStructure()}
-          </div>
+          {renderWorkoutStructure()}
         </CardContent>
       </Card>
     </div>
