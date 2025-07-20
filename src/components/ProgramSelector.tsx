@@ -6,13 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const programs = [
   {
-    id: "strength",
-    title: "Strength",
-    description: "",
-    features: [],
-    icon: "strength" as const,
-  },
-  {
     id: "hypertrophy", 
     title: "Hypertrophy",
     description: "",
@@ -49,7 +42,7 @@ export function ProgramSelector({ onProgramStart, onDefaultWorkout }: ProgramSel
 
       {/* Program Selection */}
       <div className="flex justify-center items-center min-h-[400px]">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-2xl">
+        <div className="flex justify-center">
           {programs.map((program) => (
             <ProgramCard
               key={program.id}

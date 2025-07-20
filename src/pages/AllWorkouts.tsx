@@ -111,6 +111,18 @@ export function AllWorkouts() {
   };
 
   const handleDeleteCustomWorkout = async (workoutId: string) => {
+    // Check if this workout is currently active
+    const isActive = activeWorkout && activeWorkout.workout_id === workoutId;
+    
+    if (isActive) {
+      toast({
+        title: "Cannot delete active workout",
+        description: "This workout is currently active. Please end your current mesocycle before deleting it.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('custom_workouts')
@@ -139,15 +151,18 @@ export function AllWorkouts() {
   const handleStartPlan = async (workout: DefaultWorkout | CustomWorkout, workoutType: 'default' | 'custom') => {
     if (!user) return;
 
+    // Prevent starting a new workout if one is already active
+    if (activeWorkout) {
+      toast({
+        title: "Active workout exists",
+        description: "Please end your current mesocycle before starting a new one.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setStartingWorkout(workout.id);
     try {
-      // Delete any existing active workout
-      if (activeWorkout) {
-        await supabase
-          .from('active_workouts')
-          .delete()
-          .eq('user_id', user.id);
-      }
 
       // Create new active workout
       const { error } = await supabase
@@ -216,7 +231,7 @@ export function AllWorkouts() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Custom Workout</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete this custom workout? This action cannot be undone.
+                          Are you sure you want to delete this workout?
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>

@@ -7,9 +7,9 @@ interface DurationSelectorProps {
 }
 
 const durations = [
-  { weeks: 4, label: "4 Weeks", description: "Quick start program" },
-  { weeks: 6, label: "6 Weeks", description: "Balanced approach" },
-  { weeks: 8, label: "8 Weeks", description: "Complete transformation" },
+  { weeks: 4, label: "4 Weeks" },
+  { weeks: 6, label: "6 Weeks" },
+  { weeks: 8, label: "8 Weeks" },
 ];
 
 export function DurationSelector({ selectedDuration, onDurationSelect }: DurationSelectorProps) {
@@ -24,11 +24,10 @@ export function DurationSelector({ selectedDuration, onDurationSelect }: Duratio
             <Button
               key={duration.weeks}
               variant={selectedDuration === duration.weeks ? "hero" : "outline"}
-              className="h-auto flex-col gap-2 p-4"
+              className="h-auto p-4"
               onClick={() => onDurationSelect(duration.weeks)}
             >
               <span className="text-lg font-semibold">{duration.label}</span>
-              <span className="text-sm opacity-80">{duration.description}</span>
             </Button>
           ))}
         </div>

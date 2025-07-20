@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-const days = [
+const allDays = [
   { id: "day1", name: "Day 1" },
   { id: "day2", name: "Day 2" },
   { id: "day3", name: "Day 3" },
@@ -44,12 +44,12 @@ interface CustomPlanBuilderProps {
 }
 
 export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, onPlanCreated }: CustomPlanBuilderProps) {
-  const [workoutPlan, setWorkoutPlan] = useState<Record<string, DayWorkout[]>>({});
+  const [workoutPlan, setWorkoutPlan] = useState<Record<string, DayWorkout[]>>({ day1: [] });
   const [exercisesByMuscleGroup, setExercisesByMuscleGroup] = useState<Record<string, {name: string}[]>>({});
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [planName, setPlanName] = useState("");
   const [selectedDay, setSelectedDay] = useState("day1");
-  const [restDays, setRestDays] = useState<Set<string>>(new Set());
+  const [activeDays, setActiveDays] = useState<string[]>(["day1"]);
   const [customExercises, setCustomExercises] = useState<Record<string, string[]>>({});
   const [customExerciseDialog, setCustomExerciseDialog] = useState<{
     isOpen: boolean;
@@ -146,21 +146,23 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
     setCustomExerciseName("");
   };
 
-  const toggleRestDay = (day: string) => {
-    setRestDays(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(day)) {
-        newSet.delete(day);
-      } else {
-        newSet.add(day);
-        // Clear any workouts for this day
-        setWorkoutPlan(prevPlan => ({
-          ...prevPlan,
-          [day]: []
-        }));
-      }
-      return newSet;
-    });
+  const addDay = () => {
+    if (activeDays.length >= 8) {
+      toast({
+        title: "Maximum days reached",
+        description: "You can only add up to 8 days in a custom plan.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const nextDayId = `day${activeDays.length + 1}`;
+    setActiveDays(prev => [...prev, nextDayId]);
+    setWorkoutPlan(prev => ({
+      ...prev,
+      [nextDayId]: []
+    }));
+    setSelectedDay(nextDayId);
   };
 
   const addMuscleGroup = async (day: string) => {
@@ -277,9 +279,18 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
       return;
     }
 
-    const daysWithWorkouts = Object.keys(workoutPlan).filter(day => 
+    const daysWithWorkouts = activeDays.filter(day => 
       workoutPlan[day] && workoutPlan[day].length > 0
     );
+
+    if (daysWithWorkouts.length === 0) {
+      toast({
+        title: "No workouts configured",
+        description: "Please add at least one workout day before saving your plan.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     const { error } = await supabase
       .from('custom_workouts')
@@ -325,50 +336,49 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
       </div>
 
       <Tabs value={selectedDay} onValueChange={setSelectedDay} className="w-full">
-        <TabsList className="grid w-full grid-cols-8 mb-8">
-          {days.map((day) => (
-            <TabsTrigger key={day.id} value={day.id} className="text-sm">
-              {day.name}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex items-center gap-4 mb-8">
+          <TabsList className="flex-1">
+            {activeDays.map((dayId) => {
+              const dayInfo = allDays.find(d => d.id === dayId);
+              return (
+                <TabsTrigger key={dayId} value={dayId} className="text-sm">
+                  {dayInfo?.name}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          {activeDays.length < 8 && (
+            <Button variant="outline" onClick={addDay} size="sm">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Day
+            </Button>
+          )}
+        </div>
 
-        {days.map((day) => (
-          <TabsContent key={day.id} value={day.id}>
+        {activeDays.map((dayId) => {
+          const dayInfo = allDays.find(d => d.id === dayId);
+          if (!dayInfo) return null;
+          return (
+          <TabsContent key={dayId} value={dayId}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  {day.name} Workout
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={() => toggleRestDay(day.id)} 
-                      size="sm"
-                      variant={restDays.has(day.id) ? "default" : "outline"}
-                    >
-                      💤 {restDays.has(day.id) ? "Remove Rest Day" : "Call it a Rest Day"}
-                    </Button>
-                    {!restDays.has(day.id) && (
-                      <Button onClick={() => addMuscleGroup(day.id)} size="sm">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Muscle Group
-                      </Button>
-                    )}
-                  </div>
+                  {dayInfo.name} Workout
+                  <Button onClick={() => addMuscleGroup(dayId)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Muscle Group
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {restDays.has(day.id) ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    🛌 Rest Day - No workouts scheduled
-                  </div>
-                ) : workoutPlan[day.id]?.map((workout, workoutIndex) => (
+                {workoutPlan[dayId]?.map((workout, workoutIndex) => (
                   <div key={workoutIndex} className="border rounded-lg p-4 space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 mr-4">
                         <Label>Muscle Group</Label>
                         <Select 
                           value={workout.muscleGroup} 
-                          onValueChange={(value) => updateMuscleGroup(day.id, workoutIndex, value)}
+                          onValueChange={(value) => updateMuscleGroup(dayId, workoutIndex, value)}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select muscle group" />
@@ -385,7 +395,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => removeMuscleGroup(day.id, workoutIndex)}
+                        onClick={() => removeMuscleGroup(dayId, workoutIndex)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -398,7 +408,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                           <Button 
                             variant="outline" 
                             size="sm" 
-                            onClick={() => addExercise(day.id, workoutIndex)}
+                            onClick={() => addExercise(dayId, workoutIndex)}
                           >
                             <Plus className="h-4 w-4 mr-2" />
                             Add Exercise
@@ -410,7 +420,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                             <div className="flex-1">
                               <Select 
                                 value={exercise.name} 
-                                onValueChange={(value) => updateExercise(day.id, workoutIndex, exerciseIndex, 'name', value)}
+                                onValueChange={(value) => updateExercise(dayId, workoutIndex, exerciseIndex, 'name', value)}
                               >
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select exercise" />
@@ -430,7 +440,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              onClick={() => removeExercise(day.id, workoutIndex, exerciseIndex)}
+                              onClick={() => removeExercise(dayId, workoutIndex, exerciseIndex)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -439,15 +449,16 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
                       </div>
                     )}
                   </div>
-                )) || (!restDays.has(day.id) && (
+                )) || (
                   <div className="text-center py-8 text-muted-foreground">
-                    No workouts added for {day.name} yet. Click "Add Muscle Group" to get started.
+                    No workouts added for {dayInfo.name} yet. Click "Add Muscle Group" to get started.
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
           </TabsContent>
-        ))}
+        );
+        })}
       </Tabs>
 
       <div className="mt-8 text-center">
