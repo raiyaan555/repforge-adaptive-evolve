@@ -50,6 +50,66 @@ export type Database = {
         }
         Relationships: []
       }
+      body_measurements: {
+        Row: {
+          arms: number | null
+          back: number | null
+          body_weight: number | null
+          calves: number | null
+          chest: number | null
+          created_at: string
+          id: string
+          measurement_date: string
+          measurement_type: string
+          measurement_unit: string | null
+          mesocycle_id: string | null
+          shoulders: number | null
+          thighs: number | null
+          updated_at: string
+          user_id: string
+          waist: number | null
+          weight_unit: string | null
+        }
+        Insert: {
+          arms?: number | null
+          back?: number | null
+          body_weight?: number | null
+          calves?: number | null
+          chest?: number | null
+          created_at?: string
+          id?: string
+          measurement_date?: string
+          measurement_type?: string
+          measurement_unit?: string | null
+          mesocycle_id?: string | null
+          shoulders?: number | null
+          thighs?: number | null
+          updated_at?: string
+          user_id: string
+          waist?: number | null
+          weight_unit?: string | null
+        }
+        Update: {
+          arms?: number | null
+          back?: number | null
+          body_weight?: number | null
+          calves?: number | null
+          chest?: number | null
+          created_at?: string
+          id?: string
+          measurement_date?: string
+          measurement_type?: string
+          measurement_unit?: string | null
+          mesocycle_id?: string | null
+          shoulders?: number | null
+          thighs?: number | null
+          updated_at?: string
+          user_id?: string
+          waist?: number | null
+          weight_unit?: string | null
+        }
+        Relationships: []
+      }
       custom_workouts: {
         Row: {
           created_at: string
@@ -248,6 +308,45 @@ export type Database = {
           updated_at?: string
           user_id?: string
           workout_date?: string
+        }
+        Relationships: []
+      }
+      personal_records: {
+        Row: {
+          achieved_date: string
+          created_at: string
+          exercise_name: string
+          id: string
+          max_reps: number
+          max_weight: number
+          muscle_group: string
+          updated_at: string
+          user_id: string
+          weight_unit: string | null
+        }
+        Insert: {
+          achieved_date?: string
+          created_at?: string
+          exercise_name: string
+          id?: string
+          max_reps: number
+          max_weight: number
+          muscle_group: string
+          updated_at?: string
+          user_id: string
+          weight_unit?: string | null
+        }
+        Update: {
+          achieved_date?: string
+          created_at?: string
+          exercise_name?: string
+          id?: string
+          max_reps?: number
+          max_weight?: number
+          muscle_group?: string
+          updated_at?: string
+          user_id?: string
+          weight_unit?: string | null
         }
         Relationships: []
       }

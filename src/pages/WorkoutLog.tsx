@@ -34,7 +34,7 @@ interface WorkoutLog {
   plannedReps: number;
   actualReps: number[];
   weights: number[];
-  rpe?: number;
+  rpe: number[]; // Changed to array for per-set RPE and made mandatory
   completed: boolean;
   currentSets: number;
 }
@@ -164,30 +164,25 @@ export function WorkoutLog() {
     console.log('Day key:', dayKey);
     console.log('Day workout:', dayWorkout);
     
+    // Initialize workout logs
     const logs: WorkoutLog[] = [];
     
-    if (Array.isArray(dayWorkout)) {
-      dayWorkout.forEach((muscleGroupData) => {
-        if (muscleGroupData.exercises && Array.isArray(muscleGroupData.exercises)) {
-          muscleGroupData.exercises.forEach((exercise) => {
-            // Initialize with defaults: 1 set, empty reps/weight, RPE 7 (Week 1)
-            const defaultSets = 1;
-            const defaultRpe = 7;
-            
-            logs.push({
-              exercise: exercise.name,
-              muscleGroup: muscleGroupData.muscleGroup,
-              plannedSets: defaultSets,
-              plannedReps: 0, // Empty, to be filled by user
-              actualReps: [0], // Start with one empty set
-              weights: [0], // Start with one empty set
-              rpe: defaultRpe,
-              completed: false,
-              currentSets: defaultSets
-            });
-          });
-        }
-      });
+    for (const muscleGroup of dayWorkout) {
+      for (const exercise of muscleGroup.exercises) {
+        // Default to 3 sets per exercise
+        const defaultSets = 3;
+        logs.push({
+          exercise: exercise.name,
+          muscleGroup: muscleGroup.muscleGroup,
+          plannedSets: exercise.sets || defaultSets,
+          plannedReps: exercise.reps || 0,
+          actualReps: Array(defaultSets).fill(0),
+          weights: Array(defaultSets).fill(0),
+          rpe: Array(defaultSets).fill(7), // RPE per set, default to 7
+          completed: false,
+          currentSets: defaultSets
+        });
+      }
     }
     
     console.log('Initialized logs:', logs);
@@ -200,7 +195,7 @@ export function WorkoutLog() {
     setWorkoutLogs(updatedLogs);
   };
 
-  const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight', value: number) => {
+  const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
     const updatedLogs = [...workoutLogs];
     
     // Ensure arrays are long enough
@@ -210,14 +205,20 @@ export function WorkoutLog() {
     while (updatedLogs[exerciseIndex].weights.length <= setIndex) {
       updatedLogs[exerciseIndex].weights.push(0);
     }
+    while (updatedLogs[exerciseIndex].rpe.length <= setIndex) {
+      updatedLogs[exerciseIndex].rpe.push(7);
+    }
     
-    // Prevent NaN values - enforce zero as fallback
-    const safeValue = isNaN(value) || value < 0 ? 0 : value;
+    // Prevent NaN values - enforce zero as fallback (except for RPE which has a minimum of 1)
+    const safeValue = isNaN(value) || value < 0 ? (field === 'rpe' ? 1 : 0) : value;
     
     if (field === 'reps') {
       updatedLogs[exerciseIndex].actualReps[setIndex] = safeValue;
-    } else {
+    } else if (field === 'weight') {
       updatedLogs[exerciseIndex].weights[setIndex] = safeValue;
+    } else if (field === 'rpe') {
+      // Ensure RPE is between 1 and 10
+      updatedLogs[exerciseIndex].rpe[setIndex] = Math.min(10, Math.max(1, safeValue));
     }
     setWorkoutLogs(updatedLogs);
   };
@@ -227,17 +228,33 @@ export function WorkoutLog() {
     updatedLogs[exerciseIndex].currentSets++;
     updatedLogs[exerciseIndex].actualReps.push(0);
     updatedLogs[exerciseIndex].weights.push(0);
+    updatedLogs[exerciseIndex].rpe.push(7); // Default RPE for new set
     setWorkoutLogs(updatedLogs);
   };
 
   const removeSet = (exerciseIndex: number) => {
     const updatedLogs = [...workoutLogs];
-    if (updatedLogs[exerciseIndex].currentSets > 0) {
+    // Minimum 1 set requirement
+    if (updatedLogs[exerciseIndex].currentSets > 1) {
       updatedLogs[exerciseIndex].currentSets--;
       updatedLogs[exerciseIndex].actualReps.pop();
       updatedLogs[exerciseIndex].weights.pop();
+      updatedLogs[exerciseIndex].rpe.pop();
       setWorkoutLogs(updatedLogs);
     }
+  };
+
+  // Check if exercise is completed (all sets have valid data including mandatory RPE)
+  const isExerciseCompleted = (exercise: WorkoutLog) => {
+    const setsToCheck = Math.max(exercise.plannedSets, exercise.currentSets);
+    for (let i = 0; i < setsToCheck; i++) {
+      if (!exercise.actualReps[i] || exercise.actualReps[i] === 0 ||
+          !exercise.weights[i] || exercise.weights[i] === 0 ||
+          !exercise.rpe[i] || exercise.rpe[i] < 1 || exercise.rpe[i] > 10) {
+        return false;
+      }
+    }
+    return true;
   };
 
   const getMuscleGroupExercises = (muscleGroup: string) => {
@@ -300,7 +317,7 @@ export function WorkoutLog() {
           actual_reps: exercise.actualReps,
           weight_used: exercise.weights,
           weight_unit: weightUnit,
-          rir: exercise.rpe,
+          rir: exercise.rpe.reduce((sum, rpe) => sum + rpe, 0) / exercise.rpe.length, // Average RPE
           pump_level: feedback.pumpLevel,
           is_sore: feedback.isSore,
           can_add_sets: feedback.canAddSets,
@@ -614,23 +631,25 @@ export function WorkoutLog() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {exercises.map((exercise, exerciseIndex) => {
-                      const originalIndex = workoutLogs.findIndex(log => log === exercise);
-                      
-                      return (
-                          <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="font-semibold">{exercise.exercise}</h3>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant={exercise.completed ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => updateWorkoutLog(originalIndex, 'completed', !exercise.completed)}
-                                >
-                                  {exercise.completed ? 'Completed' : 'Mark Complete'}
-                                </Button>
-                              </div>
-                            </div>
+                         {exercises.map((exercise, exerciseIndex) => {
+                           const originalIndex = workoutLogs.findIndex(log => log === exercise);
+                           const exerciseCompleted = isExerciseCompleted(exercise);
+                           
+                           return (
+                               <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
+                                 <div className="flex items-center justify-between mb-4">
+                                   <h3 className="font-semibold">{exercise.exercise}</h3>
+                                   <div className="flex items-center gap-2">
+                                     <Button
+                                       variant={exerciseCompleted ? "default" : "outline"}
+                                       size="sm"
+                                       onClick={() => updateWorkoutLog(originalIndex, 'completed', exerciseCompleted)}
+                                       disabled={!exerciseCompleted}
+                                     >
+                                       {exerciseCompleted ? 'Completed' : 'Complete All Sets'}
+                                     </Button>
+                                   </div>
+                                 </div>
                             
                             <div className="mb-4 flex items-center gap-2">
                               <Button
@@ -641,16 +660,16 @@ export function WorkoutLog() {
                                 <Plus className="h-4 w-4 mr-1" />
                                 Add Set
                               </Button>
-                              {exercise.currentSets > 0 && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => removeSet(originalIndex)}
-                                >
-                                  <Minus className="h-4 w-4 mr-1" />
-                                  Remove Set
-                                </Button>
-                              )}
+                               {exercise.currentSets > 1 && (
+                                 <Button
+                                   variant="outline"
+                                   size="sm"
+                                   onClick={() => removeSet(originalIndex)}
+                                 >
+                                   <Minus className="h-4 w-4 mr-1" />
+                                   Remove Set
+                                 </Button>
+                               )}
                               <span className="text-sm text-muted-foreground">
                                 Current sets: {Math.max(exercise.plannedSets, exercise.currentSets)}
                               </span>
@@ -677,37 +696,37 @@ export function WorkoutLog() {
                                           step="0.5"
                                         />
                                     </div>
-                                    <div>
-                                      <Label className="text-xs text-muted-foreground">
-                                        Actual Reps
-                                      </Label>
-                                       <Input
-                                         type="number"
-                                         value={exercise.actualReps[setIndex] || ''}
-                                         placeholder="e.g. 12"
-                                         onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 0)}
-                                         className="h-8"
-                                         min="1"
-                                       />
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          
-                          <div className="mt-4 flex items-center gap-4">
-                             <div className="flex items-center gap-2">
-                               <Label className="text-sm">RPE (Optional):</Label>
-                               <Input
-                                 type="number"
-                                 value={exercise.rpe || ''}
-                                 onChange={(e) => updateWorkoutLog(originalIndex, 'rpe', Number(e.target.value))}
-                                 className="w-20 h-8"
-                                 min="1"
-                                 max="10"
-                               />
+                                     <div>
+                                       <Label className="text-xs text-muted-foreground">
+                                         Actual Reps
+                                       </Label>
+                                        <Input
+                                          type="number"
+                                          value={exercise.actualReps[setIndex] || ''}
+                                          placeholder="e.g. 12"
+                                          onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 0)}
+                                          className="h-8"
+                                          min="1"
+                                        />
+                                     </div>
+                                     <div>
+                                       <Label className="text-xs text-muted-foreground">
+                                         RPE (1-10) <span className="text-destructive">*</span>
+                                       </Label>
+                                        <Input
+                                          type="number"
+                                          value={exercise.rpe[setIndex] || ''}
+                                          placeholder="Rate 1-10"
+                                          onChange={(e) => updateSetData(originalIndex, setIndex, 'rpe', Number(e.target.value) || 7)}
+                                          className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
+                                          min="1"
+                                          max="10"
+                                        />
+                                     </div>
+                                   </div>
+                                 </div>
+                               ))}
                              </div>
-                          </div>
                         </div>
                       );
                     })}
