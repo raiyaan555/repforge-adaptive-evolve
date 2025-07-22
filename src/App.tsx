@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { CalendarWidget } from "@/components/CalendarWidget";
+import { StatsPrompt } from "@/components/StatsPrompt";
+import { useStatsPrompt } from "@/hooks/useStatsPrompt";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { WorkoutLog } from "./pages/WorkoutLog";
@@ -18,6 +20,35 @@ import { CustomPlanBuilder } from "./pages/CustomPlanBuilder";
 import { CustomPlanPreview } from "./pages/CustomPlanPreview";
 
 const queryClient = new QueryClient();
+
+function AppContent() {
+  const { shouldShowPrompt, dismissPrompt, refreshStatsCheck } = useStatsPrompt();
+
+  return (
+    <>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/current-mesocycle" element={<CurrentMesocycle />} />
+        <Route path="/workouts" element={<AllWorkouts />} />
+        <Route path="/stats" element={<MyStats />} />
+        <Route path="/account" element={<MyAccount />} />
+        <Route path="/custom-plan-builder" element={<CustomPlanBuilder selectedProgram="" selectedDuration={6} onBack={() => {}} onPlanCreated={() => {}} />} />
+        <Route path="/custom-plan-preview/:workoutId" element={<CustomPlanPreview />} />
+        <Route path="/workout-log/:workoutId" element={<WorkoutLog />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      
+      <StatsPrompt 
+        open={shouldShowPrompt}
+        onClose={dismissPrompt}
+        onComplete={() => {
+          dismissPrompt();
+          refreshStatsCheck();
+        }}
+      />
+    </>
+  );
+}
 
 function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -62,18 +93,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AppLayout>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/current-mesocycle" element={<CurrentMesocycle />} />
-              <Route path="/workouts" element={<AllWorkouts />} />
-              <Route path="/stats" element={<MyStats />} />
-              <Route path="/account" element={<MyAccount />} />
-              <Route path="/custom-plan-builder" element={<CustomPlanBuilder selectedProgram="" selectedDuration={6} onBack={() => {}} onPlanCreated={() => {}} />} />
-              <Route path="/custom-plan-preview/:workoutId" element={<CustomPlanPreview />} />
-              <Route path="/workout-log/:workoutId" element={<WorkoutLog />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <AppContent />
           </AppLayout>
         </BrowserRouter>
       </TooltipProvider>

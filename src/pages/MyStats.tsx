@@ -1,421 +1,195 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { format, subDays } from "date-fns";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { PersonalRecords } from '@/components/PersonalRecords';
-import { BodyMeasurementsProgress } from '@/components/BodyMeasurementsProgress';
-import { Trophy, Ruler } from 'lucide-react';
+import { StatsPrompt } from '@/components/StatsPrompt';
+import { Weight, Ruler, Calendar } from 'lucide-react';
 
-interface WeightData {
-  date: string;
-  weight: number;
+interface CurrentStats {
+  current_weight?: number;
+  chest?: number;
+  arms?: number;
+  back?: number;
+  thighs?: number;
+  waist?: number;
+  calves?: number;
+  shoulders?: number;
+  weight_unit?: string;
+  measurement_unit?: string;
+  created_at?: string;
 }
-
-interface MuscleGroupData {
-  muscleGroup: string;
-  sets: number;
-  percentage: number;
-}
-
-interface WeeklySetsData {
-  week: string;
-  chest: number;
-  back: number;
-  shoulders: number;
-  legs: number;
-  arms: number;
-}
-
-const CHART_COLORS = ['#00C2FF', '#FF6F00', '#10B981', '#8B5CF6', '#F59E0B'];
 
 export function MyStats() {
-  const [unitPreference, setUnitPreference] = useState<'kg' | 'lbs'>('kg');
-  const [weightProgressData, setWeightProgressData] = useState<WeightData[]>([]);
-  const [weeklySetsData, setWeeklySetsData] = useState<WeeklySetsData[]>([]);
-  const [muscleGroupData, setMuscleGroupData] = useState<MuscleGroupData[]>([]);
-  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const { toast } = useToast();
+  const [currentStats, setCurrentStats] = useState<CurrentStats | null>(null);
+  const [showStatsPrompt, setShowStatsPrompt] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
-      loadUserPreferences();
-      loadStatsData();
+      fetchCurrentStats();
     }
   }, [user]);
 
-  const loadUserPreferences = async () => {
+  const fetchCurrentStats = async () => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('unit_preference')
+        .from('user_current_stats')
+        .select('*')
         .eq('user_id', user.id)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error) throw error;
-      if (data?.unit_preference) {
-        setUnitPreference(data.unit_preference as 'kg' | 'lbs');
-      }
+      setCurrentStats(data);
     } catch (error) {
-      console.error('Error loading user preferences:', error);
+      console.error('Error fetching current stats:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const updateUnitPreference = async (newUnit: 'kg' | 'lbs') => {
-    if (!user) return;
+  const handleUpdateStats = () => {
+    setShowStatsPrompt(true);
+  };
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ unit_preference: newUnit })
-        .eq('user_id', user.id);
+  const handleStatsComplete = () => {
+    setShowStatsPrompt(false);
+    fetchCurrentStats();
+  };
 
-      if (error) throw error;
-
-      setUnitPreference(newUnit);
-      toast({
-        title: "Preference updated",
-        description: `Unit preference changed to ${newUnit.toUpperCase()}`,
-      });
-
-      // Reload weight data with new unit
-      loadWeightProgressData(newUnit);
-    } catch (error) {
-      console.error('Error updating unit preference:', error);
-      toast({
-        title: "Error updating preference",
-        description: "Failed to update unit preference. Please try again.",
-        variant: "destructive"
-      });
+  const CurrentStatsDisplay = () => {
+    if (loading) {
+      return <div>Loading...</div>;
     }
-  };
 
-  const loadStatsData = async () => {
-    await Promise.all([
-      loadWeightProgressData(unitPreference),
-      loadWeeklySetsData(),
-      loadMuscleGroupDistribution()
-    ]);
-    setLoading(false);
-  };
-
-  const loadWeightProgressData = async (unit: 'kg' | 'lbs') => {
-    if (!user) return;
-
-    try {
-      const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-      
-      const { data, error } = await supabase
-        .from('workouts')
-        .select('workout_date, weight, unit')
-        .eq('user_id', user.id)
-        .gte('workout_date', thirtyDaysAgo)
-        .order('workout_date');
-
-      if (error) throw error;
-
-      // Process data to get max weight per day and convert units
-      const dailyMaxWeights = new Map<string, number>();
-      
-      data?.forEach(workout => {
-        const date = workout.workout_date;
-        let weight = workout.weight;
-        
-        // Convert weight if needed
-        if (workout.unit !== unit) {
-          weight = unit === 'kg' 
-            ? weight / 2.20462 // lbs to kg
-            : weight * 2.20462; // kg to lbs
-        }
-        
-        const currentMax = dailyMaxWeights.get(date) || 0;
-        if (weight > currentMax) {
-          dailyMaxWeights.set(date, weight);
-        }
-      });
-
-      const chartData: WeightData[] = Array.from(dailyMaxWeights.entries())
-        .map(([date, weight]) => ({
-          date: format(new Date(date), 'MMM dd'),
-          weight: Math.round(weight * 10) / 10
-        }))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-      setWeightProgressData(chartData);
-    } catch (error) {
-      console.error('Error loading weight progress:', error);
+    if (!currentStats) {
+      return (
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="flex items-center justify-center gap-2">
+              <Weight className="h-5 w-5" />
+              My Current Stats
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">No stats recorded yet</p>
+            <Button onClick={handleUpdateStats}>
+              Add Your Stats
+            </Button>
+          </CardContent>
+        </Card>
+      );
     }
-  };
 
-  const loadWeeklySetsData = async () => {
-    if (!user) return;
-
-    try {
-      const fourWeeksAgo = format(subDays(new Date(), 28), 'yyyy-MM-dd');
-      
-      const { data, error } = await supabase
-        .from('mesocycle')
-        .select('week_number, muscle_group, actual_sets')
-        .eq('user_id', user.id)
-        .gte('created_at', fourWeeksAgo)
-        .not('actual_sets', 'is', null);
-
-      if (error) throw error;
-
-      // Group by week and muscle group
-      const weeklyData = new Map<number, { [key: string]: number }>();
-      
-      data?.forEach(entry => {
-        if (!weeklyData.has(entry.week_number)) {
-          weeklyData.set(entry.week_number, {});
-        }
-        
-        const week = weeklyData.get(entry.week_number)!;
-        const muscleGroup = entry.muscle_group.toLowerCase();
-        week[muscleGroup] = (week[muscleGroup] || 0) + (entry.actual_sets || 0);
-      });
-
-      const chartData: WeeklySetsData[] = Array.from(weeklyData.entries())
-        .map(([weekNum, data]) => ({
-          week: `Week ${weekNum}`,
-          chest: data.chest || 0,
-          back: data.back || 0,
-          shoulders: data.shoulders || 0,
-          legs: data.legs || 0,
-          arms: data.arms || 0,
-        }))
-        .sort((a, b) => parseInt(a.week.split(' ')[1]) - parseInt(b.week.split(' ')[1]));
-
-      setWeeklySetsData(chartData);
-    } catch (error) {
-      console.error('Error loading weekly sets data:', error);
-    }
-  };
-
-  const loadMuscleGroupDistribution = async () => {
-    if (!user) return;
-
-    try {
-      const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
-      
-      const { data, error } = await supabase
-        .from('mesocycle')
-        .select('muscle_group, actual_sets')
-        .eq('user_id', user.id)
-        .gte('created_at', thirtyDaysAgo)
-        .not('actual_sets', 'is', null);
-
-      if (error) throw error;
-
-      // Group by muscle group
-      const muscleGroupTotals = new Map<string, number>();
-      let totalSets = 0;
-      
-      data?.forEach(entry => {
-        const muscleGroup = entry.muscle_group;
-        const sets = entry.actual_sets || 0;
-        muscleGroupTotals.set(muscleGroup, (muscleGroupTotals.get(muscleGroup) || 0) + sets);
-        totalSets += sets;
-      });
-
-      const chartData: MuscleGroupData[] = Array.from(muscleGroupTotals.entries())
-        .map(([muscleGroup, sets]) => ({
-          muscleGroup,
-          sets,
-          percentage: Math.round((sets / totalSets) * 100)
-        }))
-        .sort((a, b) => b.sets - a.sets);
-
-      setMuscleGroupData(chartData);
-    } catch (error) {
-      console.error('Error loading muscle group distribution:', error);
-    }
-  };
-
-  if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading your stats...</p>
-        </div>
-      </div>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Weight className="h-5 w-5" />
+            My Current Stats
+          </CardTitle>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Calendar className="h-4 w-4" />
+            {new Date(currentStats.created_at!).toLocaleDateString()}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Weight */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Weight className="h-4 w-4 text-primary" />
+                <span className="font-medium">Current Weight</span>
+              </div>
+              <div className="text-2xl font-bold">
+                {currentStats.current_weight} {currentStats.weight_unit}
+              </div>
+            </div>
+
+            {/* Body Measurements */}
+            {(currentStats.chest || currentStats.arms || currentStats.back || 
+              currentStats.thighs || currentStats.waist || currentStats.calves || 
+              currentStats.shoulders) && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Ruler className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Body Measurements</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {currentStats.chest && (
+                    <div>Chest: {currentStats.chest} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.arms && (
+                    <div>Arms: {currentStats.arms} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.back && (
+                    <div>Back: {currentStats.back} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.thighs && (
+                    <div>Thighs: {currentStats.thighs} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.waist && (
+                    <div>Waist: {currentStats.waist} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.calves && (
+                    <div>Calves: {currentStats.calves} {currentStats.measurement_unit}</div>
+                  )}
+                  {currentStats.shoulders && (
+                    <div>Shoulders: {currentStats.shoulders} {currentStats.measurement_unit}</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <Button 
+            onClick={handleUpdateStats}
+            variant="outline" 
+            className="w-full"
+          >
+            Update Stats
+          </Button>
+        </CardContent>
+      </Card>
     );
-  }
+  };
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">My Stats</h1>
-          <p className="text-muted-foreground">Track your progress and performance</p>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <Label htmlFor="unit-toggle">kg</Label>
-          <Switch
-            id="unit-toggle"
-            checked={unitPreference === 'lbs'}
-            onCheckedChange={(checked) => updateUnitPreference(checked ? 'lbs' : 'kg')}
-          />
-          <Label htmlFor="unit-toggle">lbs</Label>
-        </div>
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-2">My Stats</h1>
+        <p className="text-muted-foreground">
+          Track your progress and personal records
+        </p>
       </div>
 
-      {/* Weight Progress Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Weight Progress (Last 30 Days)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {weightProgressData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={weightProgressData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="date" 
-                  className="text-xs fill-muted-foreground"
-                />
-                <YAxis 
-                  className="text-xs fill-muted-foreground"
-                  label={{ value: `Weight (${unitPreference})`, angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '6px'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="weight" 
-                  stroke="#00C2FF" 
-                  strokeWidth={3}
-                  dot={{ fill: '#00C2FF', strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-              No weight data available for the last 30 days
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="records" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="records">Personal Records</TabsTrigger>
+          <TabsTrigger value="current">My Current Stats</TabsTrigger>
+        </TabsList>
 
-      {/* Weekly Sets Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Weekly Sets by Muscle Group</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {weeklySetsData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={weeklySetsData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="week" 
-                  className="text-xs fill-muted-foreground"
-                />
-                <YAxis 
-                  className="text-xs fill-muted-foreground"
-                  label={{ value: 'Sets', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '6px'
-                  }}
-                />
-                <Bar dataKey="chest" stackId="a" fill="#00C2FF" />
-                <Bar dataKey="back" stackId="a" fill="#FF6F00" />
-                <Bar dataKey="shoulders" stackId="a" fill="#10B981" />
-                <Bar dataKey="legs" stackId="a" fill="#8B5CF6" />
-                <Bar dataKey="arms" stackId="a" fill="#F59E0B" />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-              No weekly sets data available
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Muscle Group Distribution */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Muscle Group Focus (Last 30 Days)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {muscleGroupData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={muscleGroupData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ muscleGroup, percentage }) => `${muscleGroup} (${percentage}%)`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="sets"
-                >
-                  {muscleGroupData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '6px'
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-              No muscle group data available for the last 30 days
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Body Measurements Progress */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Ruler className="h-5 w-5" />
-            Body Measurements Progress
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <BodyMeasurementsProgress />
-        </CardContent>
-      </Card>
-
-      {/* Personal Records Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" />
-            Personal Records
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <TabsContent value="records" className="space-y-6">
           <PersonalRecords />
-        </CardContent>
-      </Card>
+        </TabsContent>
+
+        <TabsContent value="current" className="space-y-6">
+          <CurrentStatsDisplay />
+        </TabsContent>
+      </Tabs>
+
+      <StatsPrompt 
+        open={showStatsPrompt}
+        onClose={() => setShowStatsPrompt(false)}
+        onComplete={handleStatsComplete}
+      />
     </div>
   );
 }
