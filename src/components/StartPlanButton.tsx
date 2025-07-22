@@ -5,8 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Play } from "lucide-react";
-import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface StartPlanButtonProps {
   workoutId: string;
@@ -17,17 +15,16 @@ interface StartPlanButtonProps {
 
 export function StartPlanButton({ workoutId, workoutType, workoutName, disabled }: StartPlanButtonProps) {
   const [loading, setLoading] = useState(false);
-  const [showMeasurements, setShowMeasurements] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Handle the initial Start Plan button click
   const handleStartPlan = async () => {
     if (!user) return;
     
-    // Check if user already has an active workout first
+    setLoading(true);
     try {
+      // Check if user already has an active workout first
       const { data: existingActive } = await supabase
         .from('active_workouts')
         .select('*')
@@ -43,25 +40,7 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         return;
       }
 
-      // Show measurements dialog
-      setShowMeasurements(true);
-    } catch (error) {
-      console.error('Error checking active workout:', error);
-      toast({
-        title: "Error",
-        description: "Failed to check existing workouts. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  // Handle measurements completion and actually start the plan
-  const handleMeasurementsComplete = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    try {
-      // Create new active workout
+      // Create new active workout directly
       const { error } = await supabase
         .from('active_workouts')
         .insert({
@@ -73,8 +52,6 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         });
 
       if (error) throw error;
-
-      setShowMeasurements(false);
       
       toast({
         title: "Plan Started! 🎉",
@@ -94,39 +71,14 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
     }
   };
 
-  // Handle skipping measurements
-  const handleSkipMeasurements = async () => {
-    await handleMeasurementsComplete();
-  };
-
-  // Handle closing the dialog
-  const handleCloseDialog = () => {
-    setShowMeasurements(false);
-  };
-
   return (
-    <>
-      <Button
-        onClick={handleStartPlan}
-        disabled={disabled || loading}
-        className="w-full"
-      >
-        <Play className="h-4 w-4 mr-2" />
-        {loading ? "Starting..." : "Start Plan"}
-      </Button>
-
-      <Dialog open={showMeasurements} onOpenChange={handleCloseDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Before Starting Your Mesocycle</DialogTitle>
-          </DialogHeader>
-          <BodyMeasurementsForm
-            type="pre_mesocycle"
-            onComplete={handleMeasurementsComplete}
-            onSkip={handleSkipMeasurements}
-          />
-        </DialogContent>
-      </Dialog>
-    </>
+    <Button
+      onClick={handleStartPlan}
+      disabled={disabled || loading}
+      className="w-full"
+    >
+      <Play className="h-4 w-4 mr-2" />
+      {loading ? "Starting..." : "Start Plan"}
+    </Button>
   );
 }

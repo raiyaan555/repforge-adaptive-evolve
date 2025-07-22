@@ -8,8 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,8 +43,6 @@ export function CurrentMesocycle() {
   const [workoutDetails, setWorkoutDetails] = useState<WorkoutDetails | null>(null);
   const [currentDayExercises, setCurrentDayExercises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showPostMeasurements, setShowPostMeasurements] = useState(false);
-  const [preMeasurements, setPreMeasurements] = useState<any>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -179,37 +175,6 @@ export function CurrentMesocycle() {
   };
 
   const handleEndWorkout = async () => {
-    if (!activeWorkout || !user) return;
-
-    // Load pre-mesocycle measurements for comparison
-    try {
-      const { data: preMeasurements } = await supabase
-        .from('body_measurements')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('measurement_type', 'pre_mesocycle')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      setPreMeasurements(preMeasurements);
-      setShowPostMeasurements(true);
-    } catch (error) {
-      console.error('Error loading pre-measurements:', error);
-      // Still show measurements form even if we can't load previous ones
-      setShowPostMeasurements(true);
-    }
-  };
-
-  const handlePostMeasurementsComplete = async () => {
-    await finalizeEndWorkout();
-  };
-
-  const handleSkipPostMeasurements = async () => {
-    await finalizeEndWorkout();
-  };
-
-  const finalizeEndWorkout = async () => {
     if (!activeWorkout) return;
 
     try {
@@ -228,7 +193,6 @@ export function CurrentMesocycle() {
       setActiveWorkout(null);
       setWorkoutDetails(null);
       setCurrentDayExercises([]);
-      setShowPostMeasurements(false);
     } catch (error) {
       console.error('Error ending workout:', error);
       toast({
@@ -311,27 +275,6 @@ export function CurrentMesocycle() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-
-      {/* Post-Mesocycle Measurements Dialog */}
-      <Dialog open={showPostMeasurements} onOpenChange={(open) => {
-        if (!open) {
-          // If dialog is closed without completing, still end the mesocycle
-          setShowPostMeasurements(false);
-          finalizeEndWorkout();
-        }
-      }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Congratulations! Mesocycle Complete 🎉</DialogTitle>
-          </DialogHeader>
-          <BodyMeasurementsForm
-            type="post_mesocycle"
-            previousMeasurements={preMeasurements}
-            onComplete={handlePostMeasurementsComplete}
-            onSkip={handleSkipPostMeasurements}
-          />
-        </DialogContent>
-      </Dialog>
 
       {/* Progress Overview */}
       <Card>
