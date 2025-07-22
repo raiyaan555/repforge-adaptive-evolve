@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Play } from "lucide-react";
 import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface StartPlanButtonProps {
   workoutId: string;
@@ -99,17 +99,16 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         {loading ? "Starting..." : "Start Plan"}
       </Button>
 
-      {showMeasurements && (
-        <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <BodyMeasurementsForm
-              type="pre_mesocycle"
-              onComplete={handleMeasurementsComplete}
-              onSkip={handleSkipMeasurements}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogTitle className="sr-only">Body Measurements</DialogTitle>
+          <BodyMeasurementsForm
+            type="pre_mesocycle"
+            onComplete={handleMeasurementsComplete}
+            onSkip={handleSkipMeasurements}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
