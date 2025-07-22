@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Play } from "lucide-react";
+import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 
 interface StartPlanButtonProps {
   workoutId: string;
@@ -15,11 +17,19 @@ interface StartPlanButtonProps {
 
 export function StartPlanButton({ workoutId, workoutType, workoutName, disabled }: StartPlanButtonProps) {
   const [loading, setLoading] = useState(false);
+  const [showMeasurements, setShowMeasurements] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
 
   const handleStartPlan = async () => {
+    if (!user) return;
+    
+    // Show body measurements form first
+    setShowMeasurements(true);
+  };
+
+  const handleMeasurementsComplete = async () => {
     if (!user) return;
 
     setLoading(true);
@@ -58,8 +68,9 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         description: `${workoutName} is now your active mesocycle.`
       });
 
+      setShowMeasurements(false);
       // Navigate to current mesocycle
-      navigate('/current-mesocycle');
+      navigate('/mesocycle');
     } catch (error) {
       console.error('Error starting plan:', error);
       toast({
@@ -72,14 +83,30 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
     }
   };
 
+  const handleSkipMeasurements = async () => {
+    await handleMeasurementsComplete();
+  };
+
   return (
-    <Button
-      onClick={handleStartPlan}
-      disabled={disabled || loading}
-      className="w-full"
-    >
-      <Play className="h-4 w-4 mr-2" />
-      {loading ? "Starting..." : "Start Plan"}
-    </Button>
+    <>
+      <Button
+        onClick={handleStartPlan}
+        disabled={disabled || loading}
+        className="w-full"
+      >
+        <Play className="h-4 w-4 mr-2" />
+        {loading ? "Starting..." : "Start Plan"}
+      </Button>
+
+      <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <BodyMeasurementsForm
+            type="pre_mesocycle"
+            onComplete={handleMeasurementsComplete}
+            onSkip={handleSkipMeasurements}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

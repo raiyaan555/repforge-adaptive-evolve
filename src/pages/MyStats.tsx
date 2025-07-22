@@ -7,6 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
+import { PersonalRecords } from '@/components/PersonalRecords';
+import { BodyMeasurementsProgress } from '@/components/BodyMeasurementsProgress';
+import { Trophy, Ruler } from 'lucide-react';
 
 interface WeightData {
   date: string;
@@ -385,6 +388,32 @@ export function MyStats() {
               No muscle group data available for the last 30 days
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Body Measurements Progress */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ruler className="h-5 w-5" />
+            Body Measurements Progress
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <BodyMeasurementsProgress />
+        </CardContent>
+      </Card>
+
+      {/* Personal Records Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Trophy className="h-5 w-5" />
+            Personal Records
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PersonalRecords />
         </CardContent>
       </Card>
     </div>
