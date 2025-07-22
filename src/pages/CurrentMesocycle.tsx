@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -181,9 +181,9 @@ export function CurrentMesocycle() {
   const handleEndWorkout = async () => {
     if (!activeWorkout || !user) return;
 
-    // Load pre-mesocycle measurements first
+    // Load pre-mesocycle measurements for comparison
     try {
-      const { data: measurements } = await supabase
+      const { data: preMeasurements } = await supabase
         .from('body_measurements')
         .select('*')
         .eq('user_id', user.id)
@@ -192,13 +192,21 @@ export function CurrentMesocycle() {
         .limit(1)
         .maybeSingle();
       
-      setPreMeasurements(measurements);
+      setPreMeasurements(preMeasurements);
       setShowPostMeasurements(true);
     } catch (error) {
       console.error('Error loading pre-measurements:', error);
-      // Still allow ending workout even if measurements fail
-      await finalizeEndWorkout();
+      // Still show measurements form even if we can't load previous ones
+      setShowPostMeasurements(true);
     }
+  };
+
+  const handlePostMeasurementsComplete = async () => {
+    await finalizeEndWorkout();
+  };
+
+  const handleSkipPostMeasurements = async () => {
+    await finalizeEndWorkout();
   };
 
   const finalizeEndWorkout = async () => {
@@ -213,8 +221,8 @@ export function CurrentMesocycle() {
       if (error) throw error;
 
       toast({
-        title: "Mesocycle ended",
-        description: "Your current mesocycle has been ended successfully.",
+        title: "Mesocycle completed! 🎉",
+        description: "Your mesocycle has been ended successfully. Great work!",
       });
 
       setActiveWorkout(null);
@@ -229,14 +237,6 @@ export function CurrentMesocycle() {
         variant: "destructive"
       });
     }
-  };
-
-  const handleMeasurementsComplete = async () => {
-    await finalizeEndWorkout();
-  };
-
-  const handleSkipPostMeasurements = async () => {
-    await finalizeEndWorkout();
   };
 
   const calculateProgress = () => {
@@ -313,12 +313,21 @@ export function CurrentMesocycle() {
       </div>
 
       {/* Post-Mesocycle Measurements Dialog */}
-      <Dialog open={showPostMeasurements} onOpenChange={setShowPostMeasurements}>
+      <Dialog open={showPostMeasurements} onOpenChange={(open) => {
+        if (!open) {
+          // If dialog is closed without completing, still end the mesocycle
+          setShowPostMeasurements(false);
+          finalizeEndWorkout();
+        }
+      }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Congratulations! Mesocycle Complete 🎉</DialogTitle>
+          </DialogHeader>
           <BodyMeasurementsForm
             type="post_mesocycle"
             previousMeasurements={preMeasurements}
-            onComplete={handleMeasurementsComplete}
+            onComplete={handlePostMeasurementsComplete}
             onSkip={handleSkipPostMeasurements}
           />
         </DialogContent>

@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Play } from "lucide-react";
 import { BodyMeasurementsForm } from "@/components/BodyMeasurementsForm";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface StartPlanButtonProps {
   workoutId: string;
@@ -22,22 +22,12 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
   const { user } = useAuth();
   const { toast } = useToast();
 
+  // Handle the initial Start Plan button click
   const handleStartPlan = async () => {
     if (!user) return;
     
-    console.log('Starting plan - showing measurements form');
-    console.log('Current showMeasurements state:', showMeasurements);
-    // Show body measurements form first
-    setShowMeasurements(true);
-    console.log('Set showMeasurements to true');
-  };
-
-  const handleMeasurementsComplete = async () => {
-    if (!user) return;
-
-    setLoading(true);
+    // Check if user already has an active workout first
     try {
-      // Check if user already has an active workout
       const { data: existingActive } = await supabase
         .from('active_workouts')
         .select('*')
@@ -46,13 +36,31 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
 
       if (existingActive) {
         toast({
-          title: "Active workout found",
-          description: "You already have an active workout. Please end it first.",
+          title: "Active workout exists",
+          description: "Please end your current mesocycle before starting a new one.",
           variant: "destructive"
         });
         return;
       }
 
+      // Show measurements dialog
+      setShowMeasurements(true);
+    } catch (error) {
+      console.error('Error checking active workout:', error);
+      toast({
+        title: "Error",
+        description: "Failed to check existing workouts. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle measurements completion and actually start the plan
+  const handleMeasurementsComplete = async () => {
+    if (!user) return;
+
+    setLoading(true);
+    try {
       // Create new active workout
       const { error } = await supabase
         .from('active_workouts')
@@ -66,18 +74,18 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
 
       if (error) throw error;
 
+      setShowMeasurements(false);
+      
       toast({
         title: "Plan Started! 🎉",
         description: `${workoutName} is now your active mesocycle.`
       });
 
-      setShowMeasurements(false);
-      // Navigate to current mesocycle
       navigate('/mesocycle');
     } catch (error) {
       console.error('Error starting plan:', error);
       toast({
-        title: "Error",
+        title: "Error starting plan",
         description: "Failed to start the plan. Please try again.",
         variant: "destructive"
       });
@@ -86,8 +94,14 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
     }
   };
 
+  // Handle skipping measurements
   const handleSkipMeasurements = async () => {
     await handleMeasurementsComplete();
+  };
+
+  // Handle closing the dialog
+  const handleCloseDialog = () => {
+    setShowMeasurements(false);
   };
 
   return (
@@ -101,21 +115,18 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         {loading ? "Starting..." : "Start Plan"}
       </Button>
 
-      {showMeasurements && (
-        <Dialog open={true} onOpenChange={(open) => {
-          console.log('Dialog onOpenChange called with:', open);
-          setShowMeasurements(open);
-        }}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogTitle className="sr-only">Body Measurements</DialogTitle>
-            <BodyMeasurementsForm
-              type="pre_mesocycle"
-              onComplete={handleMeasurementsComplete}
-              onSkip={handleSkipMeasurements}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={showMeasurements} onOpenChange={handleCloseDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Before Starting Your Mesocycle</DialogTitle>
+          </DialogHeader>
+          <BodyMeasurementsForm
+            type="pre_mesocycle"
+            onComplete={handleMeasurementsComplete}
+            onSkip={handleSkipMeasurements}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
