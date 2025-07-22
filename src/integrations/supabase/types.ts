@@ -455,6 +455,57 @@ export type Database = {
         }
         Relationships: []
       }
+      user_current_stats: {
+        Row: {
+          arms: number | null
+          back: number | null
+          calves: number | null
+          chest: number | null
+          created_at: string
+          current_weight: number | null
+          id: string
+          measurement_unit: string | null
+          shoulders: number | null
+          thighs: number | null
+          updated_at: string
+          user_id: string
+          waist: number | null
+          weight_unit: string | null
+        }
+        Insert: {
+          arms?: number | null
+          back?: number | null
+          calves?: number | null
+          chest?: number | null
+          created_at?: string
+          current_weight?: number | null
+          id?: string
+          measurement_unit?: string | null
+          shoulders?: number | null
+          thighs?: number | null
+          updated_at?: string
+          user_id: string
+          waist?: number | null
+          weight_unit?: string | null
+        }
+        Update: {
+          arms?: number | null
+          back?: number | null
+          calves?: number | null
+          chest?: number | null
+          created_at?: string
+          current_weight?: number | null
+          id?: string
+          measurement_unit?: string | null
+          shoulders?: number | null
+          thighs?: number | null
+          updated_at?: string
+          user_id?: string
+          waist?: number | null
+          weight_unit?: string | null
+        }
+        Relationships: []
+      }
       workout_calendar: {
         Row: {
           created_at: string
