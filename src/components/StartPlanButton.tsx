@@ -26,8 +26,10 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
     if (!user) return;
     
     console.log('Starting plan - showing measurements form');
+    console.log('Current showMeasurements state:', showMeasurements);
     // Show body measurements form first
     setShowMeasurements(true);
+    console.log('Set showMeasurements to true');
   };
 
   const handleMeasurementsComplete = async () => {
@@ -99,16 +101,21 @@ export function StartPlanButton({ workoutId, workoutType, workoutName, disabled 
         {loading ? "Starting..." : "Start Plan"}
       </Button>
 
-      <Dialog open={showMeasurements} onOpenChange={setShowMeasurements}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle className="sr-only">Body Measurements</DialogTitle>
-          <BodyMeasurementsForm
-            type="pre_mesocycle"
-            onComplete={handleMeasurementsComplete}
-            onSkip={handleSkipMeasurements}
-          />
-        </DialogContent>
-      </Dialog>
+      {showMeasurements && (
+        <Dialog open={true} onOpenChange={(open) => {
+          console.log('Dialog onOpenChange called with:', open);
+          setShowMeasurements(open);
+        }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogTitle className="sr-only">Body Measurements</DialogTitle>
+            <BodyMeasurementsForm
+              type="pre_mesocycle"
+              onComplete={handleMeasurementsComplete}
+              onSkip={handleSkipMeasurements}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }
