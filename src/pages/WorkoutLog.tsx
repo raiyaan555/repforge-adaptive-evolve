@@ -169,8 +169,8 @@ export function WorkoutLog() {
     
     for (const muscleGroup of dayWorkout) {
       for (const exercise of muscleGroup.exercises) {
-        // Default to 3 sets per exercise
-        const defaultSets = 3;
+        // Default to 1 set per exercise
+        const defaultSets = 1;
         logs.push({
           exercise: exercise.name,
           muscleGroup: muscleGroup.muscleGroup,
