@@ -220,6 +220,13 @@ export function WorkoutLog() {
       // Ensure RPE is between 1 and 10
       updatedLogs[exerciseIndex].rpe[setIndex] = Math.min(10, Math.max(1, safeValue));
     }
+    
+    // Auto-update completed status if all sets have valid data
+    const isCompleted = isExerciseCompleted(updatedLogs[exerciseIndex]);
+    if (isCompleted) {
+      updatedLogs[exerciseIndex].completed = true;
+    }
+    
     setWorkoutLogs(updatedLogs);
   };
 
@@ -606,7 +613,7 @@ export function WorkoutLog() {
         <div className="space-y-6">
           {getUniqueMuscleGroups().map((muscleGroup) => {
             const exercises = getMuscleGroupExercises(muscleGroup);
-            const isCompleted = exercises.every(ex => ex.completed);
+            const isCompleted = exercises.every(ex => isExerciseCompleted(ex) && ex.completed);
             const hasCompletedFeedback = completedMuscleGroups.has(muscleGroup);
             
             console.log(`Muscle group ${muscleGroup}: isCompleted=${isCompleted}, hasCompletedFeedback=${hasCompletedFeedback}, exercises:`, exercises.map(ex => ({name: ex.exercise, completed: ex.completed})));
@@ -622,7 +629,7 @@ export function WorkoutLog() {
                     </CardTitle>
                     <Button
                       onClick={() => handleMuscleGroupComplete(muscleGroup)}
-                      disabled={!isCompleted || hasCompletedFeedback}
+                      disabled={!exercises.every(ex => isExerciseCompleted(ex) && ex.completed) || hasCompletedFeedback}
                       variant="outline"
                     >
                       {hasCompletedFeedback ? 'Feedback Complete' : 'Complete Muscle Group'}
@@ -639,16 +646,16 @@ export function WorkoutLog() {
                                <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
                                  <div className="flex items-center justify-between mb-4">
                                    <h3 className="font-semibold">{exercise.exercise}</h3>
-                                   <div className="flex items-center gap-2">
-                                     <Button
-                                       variant={exerciseCompleted ? "default" : "outline"}
-                                       size="sm"
-                                       onClick={() => updateWorkoutLog(originalIndex, 'completed', exerciseCompleted)}
-                                       disabled={!exerciseCompleted}
-                                     >
-                                       {exerciseCompleted ? 'Completed' : 'Complete All Sets'}
-                                     </Button>
-                                   </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant={exerciseCompleted ? "default" : "outline"}
+                                        size="sm"
+                                        onClick={() => updateWorkoutLog(originalIndex, 'completed', true)}
+                                        disabled={!exerciseCompleted}
+                                      >
+                                        {exercise.completed ? 'Completed' : 'Complete All Sets'}
+                                      </Button>
+                                    </div>
                                  </div>
                             
                             <div className="mb-4 flex items-center gap-2">
