@@ -169,8 +169,8 @@ export function WorkoutLog() {
     
     for (const muscleGroup of dayWorkout) {
       for (const exercise of muscleGroup.exercises) {
-        // Default to 1 set per exercise
-        const defaultSets = 1;
+        // Default to 2 sets per exercise
+        const defaultSets = 2;
         logs.push({
           exercise: exercise.name,
           muscleGroup: muscleGroup.muscleGroup,
@@ -228,6 +228,9 @@ export function WorkoutLog() {
     }
     
     setWorkoutLogs(updatedLogs);
+    
+    // Check if muscle group should be auto-completed
+    checkMuscleGroupAutoCompletion(updatedLogs);
   };
 
   const addSet = (exerciseIndex: number) => {
@@ -247,7 +250,26 @@ export function WorkoutLog() {
       updatedLogs[exerciseIndex].actualReps.pop();
       updatedLogs[exerciseIndex].weights.pop();
       updatedLogs[exerciseIndex].rpe.pop();
+      
+      // Reset completed status if removing sets
+      updatedLogs[exerciseIndex].completed = false;
+      
       setWorkoutLogs(updatedLogs);
+    }
+  };
+  
+  // Check if all exercises in a muscle group are completed and auto-complete the muscle group
+  const checkMuscleGroupAutoCompletion = async (logs: WorkoutLog[]) => {
+    const muscleGroups = getUniqueMuscleGroups();
+    
+    for (const muscleGroup of muscleGroups) {
+      const exercises = logs.filter(log => log.muscleGroup === muscleGroup);
+      const allCompleted = exercises.every(ex => isExerciseCompleted(ex) && ex.completed);
+      
+      if (allCompleted && !completedMuscleGroups.has(muscleGroup)) {
+        // Auto-complete this muscle group
+        await handleMuscleGroupComplete(muscleGroup);
+      }
     }
   };
 
@@ -621,20 +643,11 @@ export function WorkoutLog() {
             return (
               <Card key={muscleGroup} className="w-full">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      {muscleGroup}
-                      {isCompleted && <Badge variant="default">Completed</Badge>}
-                      {hasCompletedFeedback && <Badge variant="secondary">Feedback Given</Badge>}
-                    </CardTitle>
-                    <Button
-                      onClick={() => handleMuscleGroupComplete(muscleGroup)}
-                      disabled={!exercises.every(ex => isExerciseCompleted(ex) && ex.completed) || hasCompletedFeedback}
-                      variant="outline"
-                    >
-                      {hasCompletedFeedback ? 'Feedback Complete' : 'Complete Muscle Group'}
-                    </Button>
-                  </div>
+                  <CardTitle className="flex items-center gap-2">
+                    {muscleGroup}
+                    {isCompleted && <Badge variant="default">Completed</Badge>}
+                    {hasCompletedFeedback && <Badge variant="secondary">Feedback Given</Badge>}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
