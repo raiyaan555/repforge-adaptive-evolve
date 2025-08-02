@@ -275,7 +275,7 @@ export function WorkoutLog() {
 
   // Check if exercise is completed (all sets have valid data including mandatory RPE)
   const isExerciseCompleted = (exercise: WorkoutLog) => {
-    const setsToCheck = Math.max(exercise.plannedSets, exercise.currentSets);
+    const setsToCheck = exercise.currentSets;
     for (let i = 0; i < setsToCheck; i++) {
       if (!exercise.actualReps[i] || exercise.actualReps[i] === 0 ||
           !exercise.weights[i] || exercise.weights[i] === 0 ||
@@ -690,13 +690,13 @@ export function WorkoutLog() {
                                    Remove Set
                                  </Button>
                                )}
-                              <span className="text-sm text-muted-foreground">
-                                Current sets: {Math.max(exercise.plannedSets, exercise.currentSets)}
-                              </span>
+                               <span className="text-sm text-muted-foreground">
+                                 Current sets: {exercise.currentSets}
+                               </span>
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {Array.from({ length: Math.max(exercise.plannedSets, exercise.currentSets) }).map((_, setIndex) => (
+                              {Array.from({ length: exercise.currentSets }).map((_, setIndex) => (
                                 <div key={setIndex} className="border rounded p-3">
                                   <Label className="text-sm font-medium mb-2 block">
                                     Set {setIndex + 1}
