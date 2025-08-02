@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -23,7 +24,7 @@ const allDays = [
 ];
 
 const muscleGroups = [
-  "Chest", "Back", "Shoulders", "Arms", "Legs", "Core", "Glutes", "Cardio"
+  "Chest", "Back", "Shoulders", "Biceps", "Triceps", "Quads", "Hamstrings", "Calves", "Glutes", "Abs", "Cardio"
 ];
 
 interface Exercise {
@@ -67,6 +68,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
   const [customExerciseName, setCustomExerciseName] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Load exercises from Supabase
   const loadExercises = async (muscleGroup: string) => {
@@ -319,7 +321,7 @@ export function CustomPlanBuilder({ selectedProgram, selectedDuration, onBack, o
     });
 
     setIsDialogOpen(false);
-    onPlanCreated();
+    navigate('/workouts');
   };
 
   return (

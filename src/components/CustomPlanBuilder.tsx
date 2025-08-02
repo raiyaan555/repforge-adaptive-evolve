@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, X } from "lucide-react";
 
 interface Exercise {
@@ -29,9 +30,13 @@ const muscleGroups = [
   "Chest",
   "Back", 
   "Shoulders",
-  "Arms",
-  "Legs",
-  "Core"
+  "Biceps",
+  "Triceps",
+  "Quads",
+  "Hamstrings",
+  "Calves",
+  "Glutes",
+  "Abs"
 ];
 
 export function CustomPlanBuilder({ 
@@ -48,6 +53,7 @@ export function CustomPlanBuilder({
 
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Load exercises when muscle groups change
   useEffect(() => {
@@ -179,7 +185,7 @@ export function CustomPlanBuilder({
         description: `Your custom ${selectedProgram} plan is ready. Time to forge your strength!`,
       });
 
-      onPlanCreated();
+      navigate('/workouts');
     } catch (error) {
       toast({
         title: "Error creating plan",
