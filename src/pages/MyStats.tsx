@@ -6,7 +6,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { PersonalRecords } from '@/components/PersonalRecords';
 import { StatsPrompt } from '@/components/StatsPrompt';
-import { Weight, Ruler, Calendar } from 'lucide-react';
+import { Weight, Ruler, Calendar, TrendingUp } from 'lucide-react';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 interface CurrentStats {
   current_weight?: number;
@@ -24,13 +27,17 @@ interface CurrentStats {
 
 export function MyStats() {
   const { user } = useAuth();
+  const { convertWeight, getWeightUnit } = useUnitPreference();
   const [currentStats, setCurrentStats] = useState<CurrentStats | null>(null);
   const [showStatsPrompt, setShowStatsPrompt] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [prHistory, setPrHistory] = useState<any[]>([]);
+  const [chartLoading, setChartLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       fetchCurrentStats();
+      fetchPRHistory();
     }
   }, [user]);
 
@@ -52,6 +59,49 @@ export function MyStats() {
       console.error('Error fetching current stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPRHistory = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('personal_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('achieved_date', { ascending: true });
+
+      if (error) throw error;
+      
+      // Group by exercise name and create chart data
+      const groupedData = data.reduce((acc: any, record: any) => {
+        if (!acc[record.exercise_name]) {
+          acc[record.exercise_name] = [];
+        }
+        acc[record.exercise_name].push({
+          date: record.achieved_date,
+          weight: record.max_weight,
+          reps: record.max_reps,
+          exerciseName: record.exercise_name
+        });
+        return acc;
+      }, {});
+
+      // Convert to chart format for top exercises
+      const chartData = Object.entries(groupedData)
+        .slice(0, 6) // Top 6 exercises
+        .map(([exercise, records]: [string, any]) => ({
+          exercise,
+          maxWeight: Math.max(...records.map((r: any) => r.weight)),
+          records: records.length
+        }));
+
+      setPrHistory(chartData);
+    } catch (error) {
+      console.error('Error fetching PR history:', error);
+    } finally {
+      setChartLoading(false);
     }
   };
 
@@ -109,7 +159,7 @@ export function MyStats() {
                 <span className="font-medium">Current Weight</span>
               </div>
               <div className="text-2xl font-bold">
-                {currentStats.current_weight} {currentStats.weight_unit}
+                {currentStats.current_weight ? convertWeight(currentStats.current_weight, currentStats.weight_unit as any) : 0} {getWeightUnit()}
               </div>
             </div>
 
@@ -177,6 +227,118 @@ export function MyStats() {
         </TabsList>
 
         <TabsContent value="records" className="space-y-6">
+          {/* PR Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Personal Records by Exercise
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {chartLoading ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : prHistory.length > 0 ? (
+                  <ChartContainer 
+                    config={{
+                      maxWeight: {
+                        label: `Max Weight (${getWeightUnit()})`,
+                        color: "hsl(var(--primary))",
+                      },
+                    }}
+                    className="h-64"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={prHistory.map(item => ({
+                        ...item,
+                        maxWeight: convertWeight(item.maxWeight, 'kg')
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="exercise" 
+                          tick={{ fontSize: 12 }}
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <ChartTooltip 
+                          content={<ChartTooltipContent />}
+                        />
+                        <Bar 
+                          dataKey="maxWeight" 
+                          fill="hsl(var(--primary))"
+                          name={`Max Weight (${getWeightUnit()})`}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    No personal records to display
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  PR Count by Exercise
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {chartLoading ? (
+                  <div className="h-64 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : prHistory.length > 0 ? (
+                  <ChartContainer 
+                    config={{
+                      records: {
+                        label: "Records",
+                        color: "hsl(var(--secondary))",
+                      },
+                    }}
+                    className="h-64"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={prHistory}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="exercise" 
+                          tick={{ fontSize: 12 }}
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={80}
+                        />
+                        <YAxis tick={{ fontSize: 12 }} />
+                        <ChartTooltip 
+                          content={<ChartTooltipContent />}
+                        />
+                        <Bar 
+                          dataKey="records" 
+                          fill="hsl(var(--secondary))"
+                          name="Records"
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                ) : (
+                  <div className="h-64 flex items-center justify-center text-muted-foreground">
+                    No personal records to display
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          
           <PersonalRecords />
         </TabsContent>
 

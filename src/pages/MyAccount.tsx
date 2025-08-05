@@ -10,6 +10,7 @@ import { User, Mail, Calendar, LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useUnitPreference } from "@/hooks/useUnitPreference";
 import { format } from "date-fns";
 
 interface UserProfile {
@@ -34,6 +35,7 @@ export function MyAccount() {
   const [saving, setSaving] = useState(false);
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const { unitPreference, setUnitPreference } = useUnitPreference();
 
   useEffect(() => {
     if (user) {
@@ -228,13 +230,15 @@ export function MyAccount() {
               <Label htmlFor="unit-preference" className="text-sm">kg</Label>
               <Switch
                 id="unit-preference"
-                checked={editMode ? formData.unit_preference === 'lbs' : profile?.unit_preference === 'lbs'}
-                onCheckedChange={(checked) => {
-                  if (editMode) {
-                    setFormData({ ...formData, unit_preference: checked ? 'lbs' : 'kg' });
+                checked={unitPreference === 'lbs'}
+                onCheckedChange={async (checked) => {
+                  const newUnit = checked ? 'lbs' : 'kg';
+                  await setUnitPreference(newUnit);
+                  setFormData({ ...formData, unit_preference: newUnit });
+                  if (profile) {
+                    setProfile({ ...profile, unit_preference: newUnit });
                   }
                 }}
-                disabled={!editMode}
               />
               <Label htmlFor="unit-preference" className="text-sm">lbs</Label>
             </div>

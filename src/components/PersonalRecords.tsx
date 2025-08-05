@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trophy, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { format } from 'date-fns';
 
 interface PersonalRecord {
@@ -18,6 +19,7 @@ interface PersonalRecord {
 
 export function PersonalRecords() {
   const { user } = useAuth();
+  const { convertWeight, getWeightUnit } = useUnitPreference();
   const [records, setRecords] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -104,7 +106,7 @@ export function PersonalRecords() {
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-lg text-primary">
-                      {record.max_weight} {record.weight_unit}
+                      {convertWeight(record.max_weight, record.weight_unit as any)} {getWeightUnit()}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       × {record.max_reps} reps
