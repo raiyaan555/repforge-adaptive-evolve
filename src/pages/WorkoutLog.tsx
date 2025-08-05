@@ -217,8 +217,16 @@ export function WorkoutLog() {
     } else if (field === 'weight') {
       updatedLogs[exerciseIndex].weights[setIndex] = safeValue;
     } else if (field === 'rpe') {
-      // Ensure RPE is between 1 and 10
-      updatedLogs[exerciseIndex].rpe[setIndex] = Math.min(10, Math.max(1, safeValue));
+      // Validate RPE is between 1 and 10
+      if (value < 1 || value > 10) {
+        toast({
+          title: "Invalid RPE",
+          description: "RPE must be between 1 and 10",
+          variant: "destructive"
+        });
+        return; // Don't update if invalid
+      }
+      updatedLogs[exerciseIndex].rpe[setIndex] = safeValue;
     }
     
     // Auto-update completed status if all sets have valid data
@@ -619,17 +627,6 @@ export function WorkoutLog() {
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="unit-toggle">kg</Label>
-              <Switch
-                id="unit-toggle"
-                checked={weightUnit === 'lbs'}
-                onCheckedChange={(checked) => setWeightUnit(checked ? 'lbs' : 'kg')}
-              />
-              <Label htmlFor="unit-toggle">lbs</Label>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-6">
@@ -733,15 +730,20 @@ export function WorkoutLog() {
                                        <Label className="text-xs text-muted-foreground">
                                          RPE (1-10) <span className="text-destructive">*</span>
                                        </Label>
-                                        <Input
-                                          type="number"
-                                          value={exercise.rpe[setIndex] || ''}
-                                          placeholder="Rate 1-10"
-                                          onChange={(e) => updateSetData(originalIndex, setIndex, 'rpe', Number(e.target.value) || 7)}
-                                          className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
-                                          min="1"
-                                          max="10"
-                                        />
+                                         <Input
+                                           type="number"
+                                           value={exercise.rpe[setIndex] || ''}
+                                           placeholder="Rate 1-10"
+                                           onChange={(e) => {
+                                             const value = Number(e.target.value);
+                                             if (e.target.value === '' || (value >= 1 && value <= 10)) {
+                                               updateSetData(originalIndex, setIndex, 'rpe', value || 7);
+                                             }
+                                           }}
+                                           className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
+                                           min="1"
+                                           max="10"
+                                         />
                                      </div>
                                    </div>
                                  </div>

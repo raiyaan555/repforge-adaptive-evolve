@@ -32,6 +32,7 @@ export function MyStats() {
   const [showStatsPrompt, setShowStatsPrompt] = useState(false);
   const [loading, setLoading] = useState(true);
   const [prHistory, setPrHistory] = useState<any[]>([]);
+  const [favoriteExercises, setFavoriteExercises] = useState<any[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
 
   useEffect(() => {
@@ -88,8 +89,8 @@ export function MyStats() {
         return acc;
       }, {});
 
-      // Convert to chart format for top exercises
-      const chartData = Object.entries(groupedData)
+      // Convert to chart format for top exercises by max weight
+      const exerciseWeights = Object.entries(groupedData)
         .slice(0, 6) // Top 6 exercises
         .map(([exercise, records]: [string, any]) => ({
           exercise,
@@ -97,7 +98,18 @@ export function MyStats() {
           records: records.length
         }));
 
-      setPrHistory(chartData);
+      // Get favorite exercises by frequency (most recorded PRs)
+      const favoriteExercises = Object.entries(groupedData)
+        .sort(([,a], [,b]) => (b as any[]).length - (a as any[]).length)
+        .slice(0, 6)
+        .map(([exercise, records]: [string, any]) => ({
+          exercise,
+          frequency: records.length,
+          latestWeight: Math.max(...records.map((r: any) => r.weight))
+        }));
+
+      setPrHistory(exerciseWeights);
+      setFavoriteExercises(favoriteExercises);
     } catch (error) {
       console.error('Error fetching PR history:', error);
     } finally {
@@ -289,7 +301,7 @@ export function MyStats() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  PR Count by Exercise
+                  Favorite Exercises
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -297,18 +309,18 @@ export function MyStats() {
                   <div className="h-64 flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   </div>
-                ) : prHistory.length > 0 ? (
+                ) : favoriteExercises.length > 0 ? (
                   <ChartContainer 
                     config={{
-                      records: {
-                        label: "Records",
-                        color: "hsl(var(--secondary))",
+                      frequency: {
+                        label: "Times Trained",
+                        color: "hsl(var(--accent))",
                       },
                     }}
                     className="h-64"
                   >
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={prHistory}>
+                      <BarChart data={favoriteExercises}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
                           dataKey="exercise" 
@@ -323,16 +335,16 @@ export function MyStats() {
                           content={<ChartTooltipContent />}
                         />
                         <Bar 
-                          dataKey="records" 
-                          fill="hsl(var(--secondary))"
-                          name="Records"
+                          dataKey="frequency" 
+                          fill="hsl(var(--accent))"
+                          name="Times Trained"
                         />
                       </BarChart>
                     </ResponsiveContainer>
                   </ChartContainer>
                 ) : (
                   <div className="h-64 flex items-center justify-center text-muted-foreground">
-                    No personal records to display
+                    No exercise data to display
                   </div>
                 )}
               </CardContent>
