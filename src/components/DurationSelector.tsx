@@ -7,9 +7,9 @@ interface DurationSelectorProps {
 }
 
 const durations = [
-  { weeks: 4, label: "4 Weeks" },
-  { weeks: 6, label: "6 Weeks" },
-  { weeks: 8, label: "8 Weeks" },
+  { weeks: 5, label: "5 Weeks" },
+  { weeks: 7, label: "7 Weeks" },
+  { weeks: 9, label: "9 Weeks" },
 ];
 
 export function DurationSelector({ selectedDuration, onDurationSelect }: DurationSelectorProps) {
