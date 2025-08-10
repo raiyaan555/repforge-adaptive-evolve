@@ -1,4 +1,4 @@
-import { Home, Calendar as CalendarIcon, Dumbbell, BarChart3, User } from "lucide-react";
+import { Home, Calendar as CalendarIcon, Dumbbell, BarChart3, User, History } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar,

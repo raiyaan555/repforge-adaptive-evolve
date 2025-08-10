@@ -223,6 +223,7 @@ export type Database = {
           planned_sets: number
           pump_level: string | null
           rir: number | null
+          rpe: number[] | null
           updated_at: string
           user_id: string
           week_number: number
@@ -246,6 +247,7 @@ export type Database = {
           planned_sets: number
           pump_level?: string | null
           rir?: number | null
+          rpe?: number[] | null
           updated_at?: string
           user_id: string
           week_number: number
@@ -269,6 +271,7 @@ export type Database = {
           planned_sets?: number
           pump_level?: string | null
           rir?: number | null
+          rpe?: number[] | null
           updated_at?: string
           user_id?: string
           week_number?: number

@@ -40,7 +40,7 @@ interface WorkoutLog {
 }
 
 interface MuscleGroupFeedback {
-  pumpLevel: 'negligible' | 'low' | 'moderate' | 'amazing';
+  pumpLevel: 'none' | 'medium' | 'amazing';
   isSore: boolean;
   canAddSets: boolean;
 }
@@ -62,7 +62,7 @@ export function WorkoutLog() {
     exercises: WorkoutLog[];
   }>({ isOpen: false, muscleGroup: '', exercises: [] });
   const [feedback, setFeedback] = useState<MuscleGroupFeedback>({
-    pumpLevel: 'moderate',
+    pumpLevel: 'medium',
     isSore: false,
     canAddSets: false
   });
@@ -153,40 +153,181 @@ export function WorkoutLog() {
     }
   };
 
-  const initializeWorkoutLogs = (workoutData: any) => {
+  const initializeWorkoutLogs = async (workoutData: any) => {
     const structure = workoutData.workout_structure as WorkoutStructure;
     console.log('Workout structure:', structure);
     
-    // Get current day from active workout or default to day 1
     const dayKey = `day${currentDay}`;
     const dayWorkout = structure[dayKey] || [];
     
     console.log('Day key:', dayKey);
     console.log('Day workout:', dayWorkout);
     
-    // Initialize workout logs
-    const logs: WorkoutLog[] = [];
-    
-    for (const muscleGroup of dayWorkout) {
-      for (const exercise of muscleGroup.exercises) {
-        // Default to 2 sets per exercise
-        const defaultSets = 2;
-        logs.push({
-          exercise: exercise.name,
-          muscleGroup: muscleGroup.muscleGroup,
-          plannedSets: exercise.sets || defaultSets,
-          plannedReps: exercise.reps || 0,
+    // Base logs from template
+    const baseLogs: WorkoutLog[] = [];
+    for (const mg of dayWorkout) {
+      for (const ex of mg.exercises) {
+        const defaultSets = ex.sets || 2;
+        baseLogs.push({
+          exercise: ex.name,
+          muscleGroup: mg.muscleGroup,
+          plannedSets: ex.sets || defaultSets,
+          plannedReps: ex.reps || 0,
           actualReps: Array(defaultSets).fill(0),
           weights: Array(defaultSets).fill(0),
-          rpe: Array(defaultSets).fill(7), // RPE per set, default to 7
+          rpe: Array(defaultSets).fill(7),
           completed: false,
-          currentSets: defaultSets
+          currentSets: defaultSets,
         });
       }
     }
-    
-    console.log('Initialized logs:', logs);
-    setWorkoutLogs(logs);
+
+    // Prefill for Week 2+ and deload weeks
+    try {
+      const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
+
+      // Ask SC at start: Week 2+ always; Week 1 only if muscle group repeats earlier in the same week
+      const scByGroup: Record<string, 'none'|'medium'|'very_sore'|'extremely_sore'> = {};
+      if (user) {
+        for (const mg of muscleGroups) {
+          let shouldAsk = currentWeek >= 2;
+          if (!shouldAsk && currentWeek === 1) {
+            const { data: sameWeek } = await supabase
+              .from('mesocycle')
+              .select('id, day_number')
+              .eq('user_id', user.id)
+              .eq('plan_id', workoutId)
+              .eq('week_number', currentWeek)
+              .eq('muscle_group', mg)
+              .lt('day_number', currentDay);
+            shouldAsk = (sameWeek || []).length > 0;
+          }
+          if (shouldAsk) {
+            const sc = await promptForSoreness(mg);
+            if (sc) {
+              scByGroup[mg] = sc as any;
+              await supabase.from('muscle_soreness').insert({
+                user_id: user.id,
+                workout_date: new Date().toISOString().split('T')[0],
+                muscle_group: mg,
+                soreness_level: sc,
+                healed: sc === 'none'
+              });
+            }
+          }
+        }
+      }
+
+      // Load last week's data for prefill
+      const prevWeek = currentWeek - 1;
+      let prevRows: any[] = [];
+      if (prevWeek >= 1 && user) {
+        const { data: rows } = await supabase
+          .from('mesocycle')
+          .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, day_number')
+          .eq('user_id', user.id)
+          .eq('plan_id', workoutId)
+          .eq('week_number', prevWeek)
+          .in('muscle_group', muscleGroups);
+        prevRows = rows || [];
+      }
+
+      // Compute pump per group from last week (mode) and map to new scale
+      const mapPump = (p?: string) => {
+        if (!p) return 'medium';
+        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';
+        if (p === 'moderate' || p === 'medium') return 'medium';
+        return 'amazing';
+      };
+      const pumpByGroup: Record<string, 'none'|'medium'|'amazing'> = {};
+      for (const mg of muscleGroups) {
+        const pumps = prevRows.filter(r => r.muscle_group === mg).map(r => mapPump(r.pump_level));
+        if (pumps.length) {
+          const counts: Record<string, number> = {};
+          pumps.forEach(p => counts[p] = (counts[p] || 0) + 1);
+          pumpByGroup[mg] = (Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0] as any) || 'medium';
+        } else {
+          pumpByGroup[mg] = 'medium';
+        }
+      }
+
+      // Helper: sets adjustment table
+      const setsAdjustment = (
+        sc: 'none'|'medium'|'very_sore'|'extremely_sore'|undefined,
+        pump: 'none'|'medium'|'amazing'
+      ) => {
+        if (!sc) return 0;
+        if (sc === 'extremely_sore') return -1;
+        if (sc === 'none' && pump === 'none') return 3;
+        if (sc === 'none' && pump === 'medium') return 2;
+        if (sc === 'none' && pump === 'amazing') return 1;
+        if (sc === 'medium' && pump === 'none') return 1;
+        if (sc === 'medium' && pump === 'medium') return 1;
+        if (sc === 'medium' && pump === 'amazing') return 1;
+        if (sc === 'very_sore' && pump === 'none') return 0;
+        if (sc === 'very_sore' && pump === 'medium') return 0;
+        if (sc === 'very_sore' && pump === 'amazing') return 0;
+        return 0;
+      };
+
+      // Map previous rows by exercise for quick lookup (latest day wins)
+      const prevByExercise = new Map<string, any>();
+      prevRows
+        .sort((a,b)=> (b.day_number||0) - (a.day_number||0))
+        .forEach(r => { if (!prevByExercise.has(r.exercise_name)) prevByExercise.set(r.exercise_name, r); });
+
+      const updatedLogs = baseLogs.map(log => {
+        const prev = prevByExercise.get(log.exercise);
+        let newLog = { ...log };
+        if (prev) {
+          let baseSets = prev.actual_sets || log.currentSets;
+          // Deload on final week
+          if (currentWeek === workout.duration_weeks) {
+            const deloadSets = Math.max(1, Math.round(baseSets * 0.65));
+            newLog.plannedSets = deloadSets;
+            newLog.currentSets = deloadSets;
+          } else if (currentWeek >= 2) {
+            const sc = scByGroup[log.muscleGroup];
+            const pump = pumpByGroup[log.muscleGroup] || 'medium';
+            const add = setsAdjustment(sc, pump);
+            const targetSets = Math.max(1, baseSets + add);
+            newLog.plannedSets = targetSets;
+            newLog.currentSets = targetSets;
+          }
+
+          // Prefill weights from last week
+          const targetLen = newLog.currentSets;
+          newLog.weights = Array.from({ length: targetLen }, (_, i) => prev.weight_used?.[i] ?? 0);
+
+          // Prefill planned reps from last week's RPE and reps (per set rule)
+          const prevReps: number[] = prev.actual_reps || [];
+          const prevRpe: number[] = prev.rpe || [];
+          if (prevReps.length && prevRpe.length) {
+            const firstTarget = prevReps[0] + (prevRpe[0] <= 8 ? 1 : 0);
+            newLog.plannedReps = firstTarget;
+          }
+
+          // Resize arrays for reps and rpe to match target sets
+          newLog.actualReps = Array.from({ length: newLog.currentSets }, (_, i) => 0);
+          newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 7);
+        } else if (currentWeek === workout.duration_weeks) {
+          // No previous data but final week: still reduce default sets
+          const deloadSets = Math.max(1, Math.round(newLog.currentSets * 0.65));
+          newLog.plannedSets = deloadSets;
+          newLog.currentSets = deloadSets;
+          newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
+          newLog.weights = Array.from({ length: newLog.currentSets }, () => 0);
+          newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
+        }
+        return newLog;
+      });
+
+      console.log('Initialized logs with prefill:', updatedLogs);
+      setWorkoutLogs(updatedLogs);
+    } catch (e) {
+      console.error('Prefill initialization failed:', e);
+      setWorkoutLogs(baseLogs);
+    }
   };
 
   const updateWorkoutLog = (index: number, field: keyof WorkoutLog, value: any) => {
@@ -307,9 +448,6 @@ export function WorkoutLog() {
     const exercises = getMuscleGroupExercises(muscleGroup);
     console.log('Exercises for muscle group:', exercises);
     
-    // Check for soreness feedback if muscle group has been trained before
-    await checkSorenessPrompt(muscleGroup);
-    
     console.log('Opening feedback modal for:', muscleGroup);
     setFeedbackModal({
       isOpen: true,
@@ -354,10 +492,11 @@ export function WorkoutLog() {
           actual_reps: exercise.actualReps,
           weight_used: exercise.weights,
           weight_unit: weightUnit,
+          rpe: exercise.rpe,
           rir: exercise.rpe.reduce((sum, rpe) => sum + rpe, 0) / exercise.rpe.length, // Average RPE
           pump_level: feedback.pumpLevel,
-          is_sore: feedback.isSore,
-          can_add_sets: feedback.canAddSets,
+          is_sore: false,
+          can_add_sets: false,
           feedback_given: true
         });
       }
@@ -503,12 +642,12 @@ export function WorkoutLog() {
       
       dialog.innerHTML = `
         <div class="p-6">
-          <h3 class="text-lg font-semibold mb-4 text-foreground">How sore did you get after you worked out ${muscleGroup} last time?</h3>
+          <h3 class="text-lg font-semibold mb-4 text-foreground">How sore are you before training ${muscleGroup} today?</h3>
           <div class="space-y-2">
-            <button data-value="none" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">No soreness</button>
-            <button data-value="light" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Light soreness</button>
-            <button data-value="moderate" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Moderate soreness</button>
-            <button data-value="severe" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Severe soreness</button>
+            <button data-value="none" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">None/Negligible</button>
+            <button data-value="medium" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Medium</button>
+            <button data-value="very_sore" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Very Sore</button>
+            <button data-value="extremely_sore" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Extremely Sore</button>
           </div>
         </div>
       `;
@@ -547,18 +686,18 @@ export function WorkoutLog() {
       const isHealed = sorenessData?.[0]?.healed || true;
       let setsAdjustment = 0;
 
-      // Adaptive algorithm based on pump and soreness
-      if (pumpLevel === 'negligible' || pumpLevel === 'low') {
+      // Adaptive algorithm based on pump and soreness (legacy; actual prefill handled at start)
+      if (pumpLevel === 'none') {
         setsAdjustment = isHealed ? 3 : 1;
-      } else if (pumpLevel === 'moderate') {
-        setsAdjustment = isHealed ? 2 : 1;
+      } else if (pumpLevel === 'medium') {
+        setsAdjustment = 1;
       } else if (pumpLevel === 'amazing') {
         setsAdjustment = isHealed ? 1 : 0;
       }
 
-      // For final week, reduce to 1/3 of second last week
-      if (currentWeek === workout.duration_weeks - 1) {
-        setsAdjustment = Math.max(1, Math.floor(exercises[0]?.plannedSets / 3));
+      // Final week deload placeholder logic (actual applied during prefill)
+      if (currentWeek === workout.duration_weeks) {
+        setsAdjustment = Math.max(1, Math.floor((exercises[0]?.plannedSets || 1) * 0.65));
       }
 
       // Weight and rep progression
@@ -720,7 +859,7 @@ export function WorkoutLog() {
                                         <Input
                                           type="number"
                                           value={exercise.actualReps[setIndex] || ''}
-                                          placeholder="e.g. 12"
+                                          placeholder={String(exercise.plannedReps || '')}
                                           onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 0)}
                                           className="h-8"
                                           min="1"
@@ -772,27 +911,23 @@ export function WorkoutLog() {
               })()}
               <div>
                 <Label className="text-sm font-medium mb-3 block">
-                  How was the pump for {feedbackModal.muscleGroup}?
+                  Muscle Pump Calculation (MPC) for {feedbackModal.muscleGroup}
                 </Label>
                 <RadioGroup
                   value={feedback.pumpLevel}
                   onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
                 >
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="negligible" id="negligible" />
-                    <Label htmlFor="negligible">Negligible</Label>
+                    <RadioGroupItem value="none" id="pump-none" />
+                    <Label htmlFor="pump-none">None/Negligible</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="low" id="low" />
-                    <Label htmlFor="low">Low</Label>
+                    <RadioGroupItem value="medium" id="pump-medium" />
+                    <Label htmlFor="pump-medium">Medium</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="moderate" id="moderate" />
-                    <Label htmlFor="moderate">Moderate</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="amazing" id="amazing" />
-                    <Label htmlFor="amazing">Amazing</Label>
+                    <RadioGroupItem value="amazing" id="pump-amazing" />
+                    <Label htmlFor="pump-amazing">Amazing</Label>
                   </div>
                 </RadioGroup>
               </div>
