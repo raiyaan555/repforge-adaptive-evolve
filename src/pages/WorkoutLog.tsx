@@ -318,6 +318,17 @@ export function WorkoutLog() {
           newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
           newLog.weights = Array.from({ length: newLog.currentSets }, () => 0);
           newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
+        } else if (currentWeek >= 2) {
+          // Apply SC + MPC based adjustment even when there is no previous week data
+          const sc = scByGroup[log.muscleGroup];
+          const pump = pumpByGroup[log.muscleGroup] || 'medium';
+          const add = setsAdjustment(sc, pump);
+          const targetSets = Math.max(1, (newLog.currentSets || 1) + add);
+          newLog.plannedSets = targetSets;
+          newLog.currentSets = targetSets;
+          newLog.actualReps = Array.from({ length: targetSets }, () => 0);
+          newLog.weights = Array.from({ length: targetSets }, () => 0);
+          newLog.rpe = Array.from({ length: targetSets }, () => 7);
         }
         return newLog;
       });
