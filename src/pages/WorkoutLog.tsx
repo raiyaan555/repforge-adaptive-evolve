@@ -424,10 +424,13 @@ export function WorkoutLog() {
   // Check if exercise is completed (all sets have valid data including mandatory RPE)
   const isExerciseCompleted = (exercise: WorkoutLog) => {
     const setsToCheck = exercise.currentSets;
+    const requireRpe = currentWeek === 1; // RPE required only in week 1
     for (let i = 0; i < setsToCheck; i++) {
       if (!exercise.actualReps[i] || exercise.actualReps[i] === 0 ||
-          !exercise.weights[i] || exercise.weights[i] === 0 ||
-          !exercise.rpe[i] || exercise.rpe[i] < 1 || exercise.rpe[i] > 10) {
+          !exercise.weights[i] || exercise.weights[i] === 0) {
+        return false;
+      }
+      if (requireRpe && (!exercise.rpe[i] || exercise.rpe[i] < 1 || exercise.rpe[i] > 10)) {
         return false;
       }
     }
@@ -463,9 +466,13 @@ export function WorkoutLog() {
       console.log('Current completed muscle groups before:', Array.from(completedMuscleGroups));
       console.log('All unique muscle groups:', getUniqueMuscleGroups());
       
-      // Store feedback for this muscle group
-      setMuscleGroupFeedbacks(prev => new Map(prev.set(muscleGroup, feedback)));
-      setCompletedMuscleGroups(prev => new Set(prev.add(muscleGroup)));
+      // Store feedback for this muscle group (immutably)
+      setMuscleGroupFeedbacks(prev => {
+        const copy = new Map(prev);
+        copy.set(muscleGroup, feedback);
+        return copy;
+      });
+      setCompletedMuscleGroups(prev => new Set([...prev, muscleGroup]));
       
       // Save pump feedback for all muscle groups
       await supabase.from('pump_feedback').insert({
@@ -862,25 +869,28 @@ export function WorkoutLog() {
                                           min="1"
                                         />
                                      </div>
-                                     <div>
-                                       <Label className="text-xs text-muted-foreground">
-                                         RPE (1-10) <span className="text-destructive">*</span>
-                                       </Label>
-                                         <Input
-                                           type="number"
-                                           value={exercise.rpe[setIndex] || ''}
-                                           placeholder="Rate 1-10"
-                                           onChange={(e) => {
-                                             const value = Number(e.target.value);
-                                             if (e.target.value === '' || (value >= 1 && value <= 10)) {
-                                               updateSetData(originalIndex, setIndex, 'rpe', value || 7);
-                                             }
-                                           }}
-                                           className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
-                                           min="1"
-                                           max="10"
-                                         />
-                                     </div>
+                                     {currentWeek === 1 && (
+                                       <div>
+                                         <Label className="text-xs text-muted-foreground">
+                                           RPE (1-10) <span className="text-destructive">*</span>
+                                         </Label>
+                                           <Input
+                                             type="number"
+                                             value={exercise.rpe[setIndex] || ''}
+                                             placeholder="Rate 1-10"
+                                             onChange={(e) => {
+                                               const value = Number(e.target.value);
+                                               if (e.target.value === '' || (value >= 1 && value <= 10)) {
+                                                 updateSetData(originalIndex, setIndex, 'rpe', value || 7);
+                                               }
+                                             }}
+                                             className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
+                                             min="1"
+                                             max="10"
+                                           />
+                                       </div>
+                                     )}
+
                                    </div>
                                  </div>
                                ))}
