@@ -390,7 +390,7 @@ export function AllWorkouts() {
             Choose from our expertly designed templates or use your custom plans
           </p>
         </div>
-        <Button onClick={() => navigate('/custom-plan-builder')}>
+        <Button onClick={() => navigate('/')}>
           <Plus className="h-4 w-4 mr-2" />
           Create Custom Plan
         </Button>
@@ -454,7 +454,7 @@ export function AllWorkouts() {
               <p className="text-muted-foreground mb-4">
                 You haven't created any custom workouts yet
               </p>
-              <Button variant="outline" onClick={() => navigate('/custom-plan-builder')}>
+              <Button variant="outline" onClick={() => navigate('/')}>
                 Create Your First Custom Workout
               </Button>
             </div>
