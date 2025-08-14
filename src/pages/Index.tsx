@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LandingPage } from "@/components/LandingPage";
 import { Hero } from "@/components/Hero";
 import { ProgramSelector } from "@/components/ProgramSelector";
 import { CustomPlanBuilder } from "@/pages/CustomPlanBuilder";
@@ -9,10 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 
-type AppState = "hero" | "program-selector" | "custom-builder" | "workout-library" | "plan-created";
+type AppState = "landing" | "auth" | "hero" | "program-selector" | "custom-builder" | "workout-library" | "plan-created";
 
 const Index = () => {
-  const [appState, setAppState] = useState<AppState>("hero");
+  const [appState, setAppState] = useState<AppState>("landing");
   const [selectedProgram, setSelectedProgram] = useState<string>("");
   const [selectedDuration, setSelectedDuration] = useState<number>(6);
   
@@ -31,7 +32,16 @@ const Index = () => {
   }
 
   if (!user) {
-    return <AuthForm />;
+    return (
+      <>
+        {appState === "landing" && (
+          <LandingPage onGetStarted={() => setAppState("auth")} />
+        )}
+        {appState === "auth" && (
+          <AuthForm onBack={() => setAppState("landing")} />
+        )}
+      </>
+    );
   }
 
   const handleGetStarted = () => {
@@ -69,6 +79,11 @@ const Index = () => {
     setSelectedProgram("");
     setSelectedDuration(6);
   };
+
+  // When user is authenticated, start from hero page
+  if (appState === "landing" || appState === "auth") {
+    setAppState("hero");
+  }
 
   const handleSignOut = async () => {
     await signOut();
