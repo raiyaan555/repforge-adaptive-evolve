@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Zap, Target, TrendingUp, Users, Star, CheckCircle } from "lucide-react";
+import { ArrowRight, Zap, Target, TrendingUp, Users, CheckCircle } from "lucide-react";
 import heroImage from "@/assets/hero-fitness.jpg";
 
 interface LandingPageProps {
@@ -57,22 +57,6 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               >
                 Learn More
               </Button>
-            </div>
-            
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-primary mb-1">10K+</div>
-                <div className="text-sm text-muted-foreground">Active Users</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-primary mb-1">50M+</div>
-                <div className="text-sm text-muted-foreground">Reps Completed</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-primary mb-1">95%</div>
-                <div className="text-sm text-muted-foreground">Success Rate</div>
-              </div>
             </div>
           </div>
         </div>
@@ -172,79 +156,6 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
                     <h3 className="text-2xl font-bold mb-2">Ready to Start?</h3>
                     <p className="text-muted-foreground">Join thousands of users already transforming their fitness</p>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-24 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">
-              What Our Users Say
-            </h2>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            <div className="p-8 rounded-2xl bg-card border border-border">
-              <div className="flex items-center gap-1 mb-4">
-                {[1,2,3,4,5].map((star) => (
-                  <Star key={star} className="h-5 w-5 text-primary fill-current" />
-                ))}
-              </div>
-              <p className="text-muted-foreground mb-6 leading-relaxed">
-                "RepForge completely changed how I approach fitness. The adaptive workouts keep me challenged without overwhelming me."
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                  <span className="text-primary font-semibold">A</span>
-                </div>
-                <div>
-                  <div className="font-semibold">Alex Chen</div>
-                  <div className="text-sm text-muted-foreground">Fitness Enthusiast</div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-8 rounded-2xl bg-card border border-border">
-              <div className="flex items-center gap-1 mb-4">
-                {[1,2,3,4,5].map((star) => (
-                  <Star key={star} className="h-5 w-5 text-primary fill-current" />
-                ))}
-              </div>
-              <p className="text-muted-foreground mb-6 leading-relaxed">
-                "The progress tracking is incredible. I can see exactly how I'm improving week by week. It's so motivating!"
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                  <span className="text-primary font-semibold">S</span>
-                </div>
-                <div>
-                  <div className="font-semibold">Sarah Johnson</div>
-                  <div className="text-sm text-muted-foreground">Personal Trainer</div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-8 rounded-2xl bg-card border border-border">
-              <div className="flex items-center gap-1 mb-4">
-                {[1,2,3,4,5].map((star) => (
-                  <Star key={star} className="h-5 w-5 text-primary fill-current" />
-                ))}
-              </div>
-              <p className="text-muted-foreground mb-6 leading-relaxed">
-                "Finally, a fitness app that actually understands me. The workouts adapt to how I'm feeling each day."
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                  <span className="text-primary font-semibold">M</span>
-                </div>
-                <div>
-                  <div className="font-semibold">Mike Rodriguez</div>
-                  <div className="text-sm text-muted-foreground">Software Engineer</div>
                 </div>
               </div>
             </div>
