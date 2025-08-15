@@ -591,16 +591,17 @@ export function WorkoutLog() {
 
       // Check if mesocycle is complete
       if (nextWeek > workout.duration_weeks) {
+        // Save completed mesocycle before ending
+        await saveCompletedMesocycle();
+        
         toast({
           title: "Mesocycle Complete! 🎉",
-          description: "Congratulations! You've completed your workout plan."
+          description: "Congratulations! You've completed your workout plan and it has been saved to your history."
         });
-        // End the workout
-        await supabase
-          .from('active_workouts')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('workout_id', workoutId);
+        
+        // Navigate to past mesocycles to show the completed one
+        navigate('/past-mesocycles');
+        return;
       } else {
         toast({
           title: "Day Complete! 🎉",
@@ -686,6 +687,59 @@ export function WorkoutLog() {
     });
   };
 
+
+  const saveCompletedMesocycle = async () => {
+    try {
+      // Get active workout details
+      const { data: activeWorkout } = await supabase
+        .from('active_workouts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId)
+        .maybeSingle();
+
+      if (!activeWorkout) return;
+
+      // Get all mesocycle data
+      const { data: mesocycleData } = await supabase
+        .from('mesocycle')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('plan_id', workoutId);
+
+      // Save the completed mesocycle
+      await supabase
+        .from('completed_mesocycles')
+        .insert({
+          user_id: user.id,
+          mesocycle_name: workout.name || 'Custom Workout',
+          program_type: workout.program_type || 'Custom',
+          start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T')[0],
+          total_weeks: workout.duration_weeks,
+          total_days: workout.days_per_week * workout.duration_weeks,
+          mesocycle_data: {
+            workouts: mesocycleData || [],
+            workout_structure: workout.workout_structure
+          }
+        });
+
+      // Delete the active workout
+      await supabase
+        .from('active_workouts')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId);
+
+    } catch (error) {
+      console.error('Error saving completed mesocycle:', error);
+      toast({
+        title: "Error saving mesocycle",
+        description: "There was an error saving your completed mesocycle.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const applyProgressionAlgorithm = async (muscleGroup: string, exercises: WorkoutLog[]) => {
     try {
