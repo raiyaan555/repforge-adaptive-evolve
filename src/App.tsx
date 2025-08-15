@@ -78,11 +78,11 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
-          <main className="flex-1 flex flex-col">
-            <header className="h-12 flex items-center justify-end border-b px-4">
+          <main className="flex-1 flex flex-col min-w-0">
+            <header className="h-12 flex items-center justify-end border-b px-2 sm:px-4">
               <CalendarWidget />
             </header>
-            <div className="flex-1">
+            <div className="flex-1 overflow-auto">
               {children}
             </div>
           </main>

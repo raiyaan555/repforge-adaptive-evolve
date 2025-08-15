@@ -819,27 +819,28 @@ export function WorkoutLog() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-background p-2 sm:p-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <Button
               variant="outline"
               onClick={() => navigate('/workouts')}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 w-fit"
+              size="sm"
             >
               <ChevronLeft className="h-4 w-4" />
-              Back to Workouts
+              Back
             </Button>
             <div>
-              <h1 className="text-2xl font-bold">Day {currentDay} - Workout Log</h1>
-              <p className="text-muted-foreground">{workout.name} - Week {currentWeek}</p>
+              <h1 className="text-xl sm:text-2xl font-bold">Day {currentDay} - Workout Log</h1>
+              <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
             </div>
           </div>
           
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {getUniqueMuscleGroups().map((muscleGroup) => {
             const exercises = getMuscleGroupExercises(muscleGroup);
             const isCompleted = exercises.every(ex => isExerciseCompleted(ex) && ex.completed);
@@ -849,61 +850,68 @@ export function WorkoutLog() {
             
             return (
               <Card key={muscleGroup} className="w-full">
-                <CardHeader className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    {muscleGroup}
-                    {isCompleted && <Badge variant="default">Completed</Badge>}
-                    {hasCompletedFeedback && <Badge variant="secondary">Feedback Given</Badge>}
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <span className="text-lg">{muscleGroup}</span>
+                    <div className="flex gap-2">
+                      {isCompleted && <Badge variant="default" className="text-xs">Completed</Badge>}
+                      {hasCompletedFeedback && <Badge variant="secondary" className="text-xs">Feedback Given</Badge>}
+                    </div>
                   </CardTitle>
                   <Button
                     variant="energy"
                     size="sm"
                     onClick={() => handleMuscleGroupComplete(muscleGroup)}
                     disabled={!isCompleted || hasCompletedFeedback}
+                    className="w-full sm:w-auto text-xs sm:text-sm"
                   >
-                    muscle group complete
+                    Complete Group
                   </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                          {exercises.map((exercise, exerciseIndex) => {
                            const originalIndex = workoutLogs.findIndex(log => log === exercise);
                            const exerciseCompleted = isExerciseCompleted(exercise);
                            
                            return (
-                               <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-4">
-                                 <div className="flex items-center justify-between mb-4">
-                                   <h3 className="font-semibold">{exercise.exercise}</h3>
+                               <div key={`${muscleGroup}-${exerciseIndex}`} className="border rounded-lg p-3 sm:p-4">
+                                 <div className="flex items-center justify-between mb-3 sm:mb-4">
+                                   <h3 className="font-semibold text-base sm:text-lg truncate">{exercise.exercise}</h3>
                                  </div>
                             
-                            <div className="mb-4 flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => addSet(originalIndex)}
-                              >
-                                <Plus className="h-4 w-4 mr-1" />
-                                Add Set
-                              </Button>
-                               {exercise.currentSets > 1 && (
-                                 <Button
-                                   variant="outline"
-                                   size="sm"
-                                   onClick={() => removeSet(originalIndex)}
-                                 >
-                                   <Minus className="h-4 w-4 mr-1" />
-                                   Remove Set
-                                 </Button>
-                               )}
-                               <span className="text-sm text-muted-foreground">
-                                 Current sets: {exercise.currentSets}
+                            <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => addSet(originalIndex)}
+                                  className="text-xs"
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  Add
+                                </Button>
+                                 {exercise.currentSets > 1 && (
+                                   <Button
+                                     variant="outline"
+                                     size="sm"
+                                     onClick={() => removeSet(originalIndex)}
+                                     className="text-xs"
+                                   >
+                                     <Minus className="h-3 w-3 mr-1" />
+                                     Remove
+                                   </Button>
+                                 )}
+                              </div>
+                               <span className="text-xs sm:text-sm text-muted-foreground">
+                                 Sets: {exercise.currentSets}
                                </span>
                             </div>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                               {Array.from({ length: exercise.currentSets }).map((_, setIndex) => (
-                                <div key={setIndex} className="border rounded p-3">
-                                  <Label className="text-sm font-medium mb-2 block">
+                                <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
+                                  <Label className="text-xs sm:text-sm font-medium mb-2 block">
                                     Set {setIndex + 1}
                                   </Label>
                                   <div className="space-y-2">
@@ -914,23 +922,23 @@ export function WorkoutLog() {
                                         <Input
                                           type="number"
                                           value={exercise.weights[setIndex] || ''}
-                                          placeholder="e.g. 20 kg"
+                                          placeholder="e.g. 20"
                                           onChange={(e) => updateSetData(originalIndex, setIndex, 'weight', Number(e.target.value) || 0)}
-                                          className="h-8"
+                                          className="h-8 text-sm"
                                           min="0"
                                           step="0.5"
                                         />
                                     </div>
                                      <div>
                                        <Label className="text-xs text-muted-foreground">
-                                         Actual Reps
+                                         Reps
                                        </Label>
                                         <Input
                                           type="number"
                                           value={exercise.actualReps[setIndex] || ''}
                                           placeholder={String(exercise.plannedReps || '')}
                                           onChange={(e) => updateSetData(originalIndex, setIndex, 'reps', Number(e.target.value) || 0)}
-                                          className="h-8"
+                                          className="h-8 text-sm"
                                           min="1"
                                         />
                                      </div>
@@ -942,14 +950,14 @@ export function WorkoutLog() {
                                            <Input
                                              type="number"
                                              value={exercise.rpe[setIndex] || ''}
-                                             placeholder="Rate 1-10"
+                                             placeholder="1-10"
                                              onChange={(e) => {
                                                const value = Number(e.target.value);
                                                if (e.target.value === '' || (value >= 1 && value <= 10)) {
                                                  updateSetData(originalIndex, setIndex, 'rpe', value || 7);
                                                }
                                              }}
-                                             className={`h-8 ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
+                                             className={`h-8 text-sm ${!exercise.rpe[setIndex] || exercise.rpe[setIndex] < 1 || exercise.rpe[setIndex] > 10 ? 'border-destructive' : ''}`}
                                              min="1"
                                              max="10"
                                            />
@@ -971,9 +979,9 @@ export function WorkoutLog() {
         </div>
 
         <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => setFeedbackModal(prev => ({ ...prev, isOpen: open }))}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
-              <DialogTitle>Muscle Group Feedback</DialogTitle>
+              <DialogTitle className="text-lg">Muscle Group Feedback</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
               {(() => {

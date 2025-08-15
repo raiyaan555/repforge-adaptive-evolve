@@ -276,16 +276,16 @@ export function CurrentMesocycle() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-6 max-w-7xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Current Mesocycle</h1>
-          <p className="text-muted-foreground">Track your ongoing workout progress</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Current Mesocycle</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Track your ongoing workout progress</p>
         </div>
         
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive" size="sm">
+            <Button variant="destructive" size="sm" className="w-full sm:w-auto">
               <Square className="h-4 w-4 mr-2" />
               End Mesocycle
             </Button>
@@ -320,22 +320,22 @@ export function CurrentMesocycle() {
           </div>
           <Progress value={calculateProgress()} className="h-2" />
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{activeWorkout.current_week}</div>
-              <div className="text-sm text-muted-foreground">Current Week</div>
+              <div className="text-xl sm:text-2xl font-bold text-primary">{activeWorkout.current_week}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">Current Week</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{activeWorkout.current_day}</div>
-              <div className="text-sm text-muted-foreground">Current Day</div>
+              <div className="text-xl sm:text-2xl font-bold text-primary">{activeWorkout.current_day}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">Current Day</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{workoutDetails.duration_weeks}</div>
-              <div className="text-sm text-muted-foreground">Total Weeks</div>
+              <div className="text-xl sm:text-2xl font-bold text-primary">{workoutDetails.duration_weeks}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">Total Weeks</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-primary">{workoutDetails.days_per_week}</div>
-              <div className="text-sm text-muted-foreground">Days/Week</div>
+              <div className="text-xl sm:text-2xl font-bold text-primary">{workoutDetails.days_per_week}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">Days/Week</div>
             </div>
           </div>
 
@@ -349,11 +349,12 @@ export function CurrentMesocycle() {
       {/* Current Day Workout */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Day {activeWorkout.current_day} Workout</span>
+          <CardTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-lg sm:text-xl">Day {activeWorkout.current_day} Workout</span>
             <Button 
               onClick={() => navigate(`/workout-log/${workoutDetails.id}`)}
               size="sm"
+              className="w-full sm:w-auto"
             >
               <Play className="h-4 w-4 mr-2" />
               Start Workout
@@ -365,13 +366,13 @@ export function CurrentMesocycle() {
             <div className="space-y-3">
               {currentDayExercises.map((exercise, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div>
-                    <div className="font-medium">{exercise.name}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{exercise.name}</div>
                     <div className="text-sm text-muted-foreground">
                       {exercise.muscleGroup} • {exercise.sets} sets × {exercise.reps} reps
                     </div>
                   </div>
-                  <Badge variant="outline">{exercise.muscleGroup}</Badge>
+                  <Badge variant="outline" className="ml-2 flex-shrink-0">{exercise.muscleGroup}</Badge>
                 </div>
               ))}
             </div>
@@ -389,16 +390,16 @@ export function CurrentMesocycle() {
           <CardTitle>Week {activeWorkout.current_week} Preview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4">
+          <div className="grid gap-3 sm:gap-4">
             {getAllWeekExercises().map((day) => (
-              <div key={day.day} className="border rounded-lg p-4">
+              <div key={day.day} className="border rounded-lg p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold">Day {day.day}</h4>
+                  <h4 className="font-semibold text-sm sm:text-base">Day {day.day}</h4>
                   {day.day === activeWorkout.current_day && (
-                    <Badge variant="default">Current</Badge>
+                    <Badge variant="default" className="text-xs">Current</Badge>
                   )}
                   {day.day < activeWorkout.current_day && (
-                    <Badge variant="secondary">Completed</Badge>
+                    <Badge variant="secondary" className="text-xs">Completed</Badge>
                   )}
                 </div>
                 {day.isRestDay ? (

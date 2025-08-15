@@ -87,10 +87,10 @@ export function PastMesocycles() {
     return (
       <div className="space-y-6">
         {/* Overview Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">{mesocycle.total_weeks}</div>
+            <CardContent className="pt-4 sm:pt-6">
+              <div className="text-xl sm:text-2xl font-bold">{mesocycle.total_weeks}</div>
               <p className="text-xs text-muted-foreground">Total Weeks</p>
             </CardContent>
           </Card>
@@ -118,9 +118,9 @@ export function PastMesocycles() {
 
         {/* Weekly Breakdown */}
         <Tabs defaultValue="week-1" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
             {Object.keys(weeklyData).map(week => (
-              <TabsTrigger key={week} value={`week-${week}`}>
+              <TabsTrigger key={week} value={`week-${week}`} className="text-xs sm:text-sm py-2">
                 Week {week}
               </TabsTrigger>
             ))}
@@ -201,13 +201,13 @@ export function PastMesocycles() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-2 flex items-center justify-center gap-3">
-          <History className="h-8 w-8" />
+    <div className="container mx-auto p-2 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-4xl font-bold mb-2 flex items-center justify-center gap-2 sm:gap-3">
+          <History className="h-6 w-6 sm:h-8 sm:w-8" />
           Past Mesocycles
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground text-sm sm:text-base">
           Review your completed training cycles and track your progress
         </p>
       </div>
@@ -227,18 +227,20 @@ export function PastMesocycles() {
           {completedMesocycles.map((mesocycle) => (
             <Card key={mesocycle.id}>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Dumbbell className="h-5 w-5" />
-                      {mesocycle.mesocycle_name}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                      <Dumbbell className="h-5 w-5 flex-shrink-0" />
+                      <span className="truncate">{mesocycle.mesocycle_name}</span>
                     </CardTitle>
-                    <div className="flex items-center gap-4 mt-2">
-                      <Badge variant="secondary">{mesocycle.program_type}</Badge>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        {format(new Date(mesocycle.start_date), 'MMM dd, yyyy')} - {' '}
-                        {format(new Date(mesocycle.end_date), 'MMM dd, yyyy')}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                      <Badge variant="secondary" className="w-fit">{mesocycle.program_type}</Badge>
+                      <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="truncate">
+                          {format(new Date(mesocycle.start_date), 'MMM dd, yy')} - {' '}
+                          {format(new Date(mesocycle.end_date), 'MMM dd, yy')}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -246,18 +248,19 @@ export function PastMesocycles() {
                     <DialogTrigger asChild>
                       <Button 
                         variant="outline" 
-                        className="flex items-center gap-2"
+                        className="flex items-center gap-2 w-full sm:w-auto"
+                        size="sm"
                         onClick={() => setSelectedMesocycle(mesocycle)}
                       >
                         <Eye className="h-4 w-4" />
-                        View More
+                        View Details
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-y-auto mx-2">
                       <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
+                        <DialogTitle className="flex items-center gap-2 text-lg">
                           <TrendingUp className="h-5 w-5" />
-                          {mesocycle.mesocycle_name} - Detailed View
+                          <span className="truncate">{mesocycle.mesocycle_name}</span>
                         </DialogTitle>
                       </DialogHeader>
                       {selectedMesocycle && (
@@ -268,26 +271,26 @@ export function PastMesocycles() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <div>
-                    <div className="text-2xl font-bold text-primary">{mesocycle.total_weeks}</div>
-                    <div className="text-muted-foreground">Weeks</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">{mesocycle.total_weeks}</div>
+                    <div className="text-muted-foreground text-xs">Weeks</div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-primary">{mesocycle.total_days}</div>
-                    <div className="text-muted-foreground">Training Days</div>
+                  <div className="text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">{mesocycle.total_days}</div>
+                    <div className="text-muted-foreground text-xs">Training Days</div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-primary">
+                  <div className="text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">
                       {mesocycle.mesocycle_data?.workouts?.length || 0}
                     </div>
-                    <div className="text-muted-foreground">Total Exercises</div>
+                    <div className="text-muted-foreground text-xs">Exercises</div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-primary">
+                  <div className="text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">
                       {mesocycle.mesocycle_data?.workouts?.filter((w: any) => w.actual_sets).length || 0}
                     </div>
-                    <div className="text-muted-foreground">Completed</div>
+                    <div className="text-muted-foreground text-xs">Completed</div>
                   </div>
                 </div>
               </CardContent>

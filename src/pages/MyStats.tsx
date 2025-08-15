@@ -184,29 +184,29 @@ export function MyStats() {
                   <Ruler className="h-4 w-4 text-primary" />
                   <span className="font-medium">Body Measurements</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {currentStats.chest && (
-                    <div>Chest: {currentStats.chest} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.arms && (
-                    <div>Arms: {currentStats.arms} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.back && (
-                    <div>Back: {currentStats.back} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.thighs && (
-                    <div>Thighs: {currentStats.thighs} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.waist && (
-                    <div>Waist: {currentStats.waist} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.calves && (
-                    <div>Calves: {currentStats.calves} {currentStats.measurement_unit}</div>
-                  )}
-                  {currentStats.shoulders && (
-                    <div>Shoulders: {currentStats.shoulders} {currentStats.measurement_unit}</div>
-                  )}
-                </div>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-sm">
+                   {currentStats.chest && (
+                     <div>Chest: {currentStats.chest} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.arms && (
+                     <div>Arms: {currentStats.arms} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.back && (
+                     <div>Back: {currentStats.back} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.thighs && (
+                     <div>Thighs: {currentStats.thighs} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.waist && (
+                     <div>Waist: {currentStats.waist} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.calves && (
+                     <div>Calves: {currentStats.calves} {currentStats.measurement_unit}</div>
+                   )}
+                   {currentStats.shoulders && (
+                     <div>Shoulders: {currentStats.shoulders} {currentStats.measurement_unit}</div>
+                   )}
+                 </div>
               </div>
             )}
           </div>
@@ -224,10 +224,10 @@ export function MyStats() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-2">My Stats</h1>
-        <p className="text-muted-foreground">
+    <div className="container mx-auto p-2 sm:p-6 space-y-4 sm:space-y-6 max-w-7xl">
+      <div className="text-center mb-6 sm:mb-8">
+        <h1 className="text-2xl sm:text-4xl font-bold mb-2">My Stats</h1>
+        <p className="text-muted-foreground text-sm sm:text-base">
           Track your progress and personal records
         </p>
       </div>
@@ -299,7 +299,7 @@ export function MyStats() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <TrendingUp className="h-5 w-5" />
                   Favorite Exercises
                 </CardTitle>
