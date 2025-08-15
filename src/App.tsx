@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import { WorkoutLog } from "./pages/WorkoutLog";
 import { CurrentMesocycle } from "./pages/CurrentMesocycle";
 import { AllWorkouts } from "./pages/AllWorkouts";
+import { PastMesocycles } from "./pages/PastMesocycles";
 import { MyStats } from "./pages/MyStats";
 import { MyAccount } from "./pages/MyAccount";
 import { CustomPlanBuilder } from "./pages/CustomPlanBuilder";
@@ -33,6 +34,7 @@ function AppContent() {
         <Route path="/reset-password" element={<PasswordReset />} />
         <Route path="/current-mesocycle" element={<CurrentMesocycle />} />
         <Route path="/workouts" element={<AllWorkouts />} />
+        <Route path="/past-mesocycles" element={<PastMesocycles />} />
         <Route path="/stats" element={<MyStats />} />
         <Route path="/account" element={<MyAccount />} />
         <Route path="/custom-plan-builder" element={<CustomPlanBuilder selectedProgram="" selectedDuration={6} onBack={() => {}} onPlanCreated={() => {}} />} />

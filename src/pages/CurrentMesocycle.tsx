@@ -175,19 +175,48 @@ export function CurrentMesocycle() {
   };
 
   const handleEndWorkout = async () => {
-    if (!activeWorkout) return;
+    if (!activeWorkout || !workoutDetails || !user) return;
 
     try {
-      const { error } = await supabase
+      // First, gather all mesocycle data
+      const { data: mesocycleData, error: mesocycleError } = await supabase
+        .from('mesocycle')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('plan_id', activeWorkout.workout_id);
+
+      if (mesocycleError) throw mesocycleError;
+
+      // Save the completed mesocycle
+      const { error: saveError } = await supabase
+        .from('completed_mesocycles')
+        .insert({
+          user_id: user.id,
+          mesocycle_name: workoutDetails.name || 'Custom Workout',
+          program_type: workoutDetails.program_type || 'Custom',
+          start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T')[0],
+          total_weeks: workoutDetails.duration_weeks,
+          total_days: workoutDetails.days_per_week * workoutDetails.duration_weeks,
+          mesocycle_data: {
+            workouts: mesocycleData || [],
+            workout_structure: workoutDetails.workout_structure
+          }
+        });
+
+      if (saveError) throw saveError;
+
+      // Delete the active workout
+      const { error: deleteError } = await supabase
         .from('active_workouts')
         .delete()
         .eq('id', activeWorkout.id);
 
-      if (error) throw error;
+      if (deleteError) throw deleteError;
 
       toast({
         title: "Mesocycle completed! 🎉",
-        description: "Your mesocycle has been ended successfully. Great work!",
+        description: "Your mesocycle has been ended and saved to your history. Great work!",
       });
 
       setActiveWorkout(null);

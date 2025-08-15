@@ -17,6 +17,7 @@ const menuItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Current Mesocycle", url: "/current-mesocycle", icon: CalendarIcon },
   { title: "All Workouts", url: "/workouts", icon: Dumbbell },
+  { title: "Past Mesocycles", url: "/past-mesocycles", icon: History },
   { title: "My Stats", url: "/stats", icon: BarChart3 },
   { title: "My Account", url: "/account", icon: User },
 ];
