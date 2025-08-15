@@ -19,6 +19,7 @@ import { MyStats } from "./pages/MyStats";
 import { MyAccount } from "./pages/MyAccount";
 import { CustomPlanBuilder } from "./pages/CustomPlanBuilder";
 import { CustomPlanPreview } from "./pages/CustomPlanPreview";
+import { PasswordReset } from "./components/PasswordReset";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ function AppContent() {
     <>
       <Routes>
         <Route path="/" element={<Index />} />
+        <Route path="/reset-password" element={<PasswordReset />} />
         <Route path="/current-mesocycle" element={<CurrentMesocycle />} />
         <Route path="/workouts" element={<AllWorkouts />} />
         <Route path="/stats" element={<MyStats />} />

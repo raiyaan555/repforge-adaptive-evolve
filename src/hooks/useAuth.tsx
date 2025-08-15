@@ -35,9 +35,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+        // Handle password recovery event
+        if (event === 'PASSWORD_RECOVERY') {
+          // Don't automatically redirect, let the password reset page handle it
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        } else {
+          setSession(session);
+          setUser(session?.user ?? null);
+          setLoading(false);
+        }
       }
     );
 
