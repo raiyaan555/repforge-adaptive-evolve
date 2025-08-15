@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -107,6 +107,48 @@ export type Database = {
           user_id?: string
           waist?: number | null
           weight_unit?: string | null
+        }
+        Relationships: []
+      }
+      completed_mesocycles: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          mesocycle_data: Json
+          mesocycle_name: string
+          program_type: string
+          start_date: string
+          total_days: number
+          total_weeks: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          mesocycle_data: Json
+          mesocycle_name: string
+          program_type: string
+          start_date: string
+          total_days: number
+          total_weeks: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          mesocycle_data?: Json
+          mesocycle_name?: string
+          program_type?: string
+          start_date?: string
+          total_days?: number
+          total_weeks?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
