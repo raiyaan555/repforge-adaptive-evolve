@@ -81,8 +81,21 @@ export function PastMesocycles() {
   };
 
   const MesocycleDetailView = ({ mesocycle }: { mesocycle: CompletedMesocycle }) => {
-    const workoutData = mesocycle.mesocycle_data?.workouts || [];
-    const weeklyData = groupDataByWeek(workoutData);
+    // Get all workout data and ensure we have the complete dataset
+    const allWorkoutData = mesocycle.mesocycle_data?.workouts || [];
+    const weeklyData = groupDataByWeek(allWorkoutData);
+    
+    // Group exercises by day within each week for better organization
+    const groupDataByDay = (exercises: WorkoutData[]) => {
+      const days: { [key: number]: WorkoutData[] } = {};
+      exercises.forEach(exercise => {
+        if (!days[exercise.day_number]) {
+          days[exercise.day_number] = [];
+        }
+        days[exercise.day_number].push(exercise);
+      });
+      return days;
+    };
 
     return (
       <div className="space-y-6">
@@ -102,90 +115,179 @@ export function PastMesocycles() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold">{workoutData.length}</div>
+              <div className="text-2xl font-bold">{allWorkoutData.length}</div>
               <p className="text-xs text-muted-foreground">Total Exercises</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">
-                {workoutData.filter(w => w.actual_sets).length}
+                {allWorkoutData.filter(w => w.actual_sets && w.actual_sets > 0).length}
               </div>
               <p className="text-xs text-muted-foreground">Completed Exercises</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Weekly Breakdown */}
-        <Tabs defaultValue="week-1" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
-            {Object.keys(weeklyData).map(week => (
-              <TabsTrigger key={week} value={`week-${week}`} className="text-xs sm:text-sm py-2">
+        {/* Complete Weekly Breakdown */}
+        <Tabs defaultValue={`week-${Math.min(...Object.keys(weeklyData).map(Number))}`} className="w-full">
+          <TabsList className="grid w-full h-auto" style={{ gridTemplateColumns: `repeat(${Object.keys(weeklyData).length}, 1fr)` }}>
+            {Object.keys(weeklyData).sort((a, b) => Number(a) - Number(b)).map(week => (
+              <TabsTrigger key={week} value={`week-${week}`} className="text-xs sm:text-sm py-2 px-1">
                 Week {week}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {Object.entries(weeklyData).map(([weekNum, exercises]) => (
-            <TabsContent key={weekNum} value={`week-${weekNum}`} className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    Week {weekNum} Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Day</TableHead>
-                        <TableHead>Exercise</TableHead>
-                        <TableHead>Muscle Group</TableHead>
-                        <TableHead>Sets</TableHead>
-                        <TableHead>Reps</TableHead>
-                        <TableHead>Weight ({getWeightUnit()})</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {exercises.map((exercise, index) => (
-                        <TableRow key={index}>
-                          <TableCell>Day {exercise.day_number}</TableCell>
-                          <TableCell className="font-medium">{exercise.exercise_name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{exercise.muscle_group}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            {exercise.actual_sets || exercise.planned_sets}
-                            {exercise.actual_sets && exercise.actual_sets !== exercise.planned_sets && (
-                              <span className="text-muted-foreground">
-                                {' '}(planned: {exercise.planned_sets})
-                              </span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {exercise.actual_reps 
-                              ? exercise.actual_reps.join(', ')
-                              : exercise.planned_reps
-                            }
-                          </TableCell>
-                          <TableCell>
-                            {exercise.weight_used && exercise.weight_used.length > 0
-                              ? exercise.weight_used
-                                  .map(weight => convertWeight(weight, exercise.weight_unit as any))
-                                  .join(', ')
-                              : 'Not recorded'
-                            }
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          ))}
+          {Object.entries(weeklyData).map(([weekNum, exercises]) => {
+            const dailyData = groupDataByDay(exercises);
+            
+            return (
+              <TabsContent key={weekNum} value={`week-${weekNum}`} className="space-y-4">
+                <div className="space-y-4">
+                  {Object.entries(dailyData)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([dayNum, dayExercises]) => (
+                    <Card key={dayNum}>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Calendar className="h-4 w-4" />
+                          Week {weekNum} - Day {dayNum}
+                          <Badge variant="secondary" className="ml-auto">
+                            {dayExercises[0]?.workout_name || 'Workout'}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="min-w-[150px]">Exercise</TableHead>
+                                <TableHead className="min-w-[100px]">Muscle Group</TableHead>
+                                <TableHead className="min-w-[80px]">Sets</TableHead>
+                                <TableHead className="min-w-[120px]">Reps (per set)</TableHead>
+                                <TableHead className="min-w-[140px]">Weight ({getWeightUnit()}) per set</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {dayExercises.map((exercise, index) => (
+                                <TableRow key={index}>
+                                  <TableCell className="font-medium">
+                                    <div className="flex flex-col">
+                                      <span>{exercise.exercise_name}</span>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs">
+                                      {exercise.muscle_group}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-col gap-1">
+                                      <span className="font-semibold">
+                                        {exercise.actual_sets || exercise.planned_sets}
+                                      </span>
+                                      {exercise.actual_sets && exercise.actual_sets !== exercise.planned_sets && (
+                                        <span className="text-xs text-muted-foreground">
+                                          (planned: {exercise.planned_sets})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-col gap-1">
+                                      {exercise.actual_reps && exercise.actual_reps.length > 0 ? (
+                                        <div className="space-y-1">
+                                          {exercise.actual_reps.map((reps, setIndex) => (
+                                            <div key={setIndex} className="text-xs">
+                                              Set {setIndex + 1}: <span className="font-semibold">{reps}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-sm">
+                                          {exercise.planned_reps} (planned)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <div className="flex flex-col gap-1">
+                                      {exercise.weight_used && exercise.weight_used.length > 0 ? (
+                                        <div className="space-y-1">
+                                          {exercise.weight_used.map((weight, setIndex) => (
+                                            <div key={setIndex} className="text-xs">
+                                              Set {setIndex + 1}: <span className="font-semibold">
+                                                {convertWeight(weight, exercise.weight_unit as any)} {getWeightUnit()}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-sm text-muted-foreground">
+                                          Not recorded
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </TabsContent>
+            );
+          })}
         </Tabs>
+
+        {/* Summary by Muscle Group */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Dumbbell className="h-5 w-5" />
+              Exercise Summary by Muscle Group
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4">
+              {Object.entries(
+                allWorkoutData.reduce((acc, exercise) => {
+                  if (!acc[exercise.muscle_group]) {
+                    acc[exercise.muscle_group] = [];
+                  }
+                  acc[exercise.muscle_group].push(exercise);
+                  return acc;
+                }, {} as { [key: string]: WorkoutData[] })
+              ).map(([muscleGroup, exercises]) => (
+                <div key={muscleGroup} className="border rounded-lg p-4">
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <Badge variant="secondary">{muscleGroup}</Badge>
+                     <span className="text-sm text-muted-foreground">
+                       ({(exercises as WorkoutData[]).length} exercises total)
+                     </span>
+                  </h4>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+                     {Array.from(new Set((exercises as WorkoutData[]).map((e: WorkoutData) => e.exercise_name))).map((exerciseName: string) => {
+                       const exerciseInstances = (exercises as WorkoutData[]).filter((e: WorkoutData) => e.exercise_name === exerciseName);
+                       const totalSets = exerciseInstances.reduce((sum, e) => sum + (e.actual_sets || e.planned_sets), 0);
+                       return (
+                         <div key={exerciseName} className="flex justify-between">
+                           <span>{exerciseName}</span>
+                           <span className="text-muted-foreground">{totalSets} sets</span>
+                         </div>
+                       );
+                     })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   };
