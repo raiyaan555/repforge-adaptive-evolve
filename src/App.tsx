@@ -74,36 +74,36 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <UnitPreferenceProvider>
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-background">
-          <AppSidebar />
-          <main className="flex-1 flex flex-col min-w-0">
-            <header className="h-12 flex items-center justify-end border-b px-2 sm:px-4">
-              <CalendarWidget />
-            </header>
-            <div className="flex-1 overflow-auto">
-              {children}
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
-    </UnitPreferenceProvider>
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full bg-background">
+        <AppSidebar />
+        <main className="flex-1 flex flex-col min-w-0">
+          <header className="h-12 flex items-center justify-end border-b px-2 sm:px-4">
+            <CalendarWidget />
+          </header>
+          <div className="flex-1 overflow-auto">
+            {children}
+          </div>
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppLayout>
-            <AppContent />
-          </AppLayout>
-        </BrowserRouter>
-      </TooltipProvider>
+      <UnitPreferenceProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppLayout>
+              <AppContent />
+            </AppLayout>
+          </BrowserRouter>
+        </TooltipProvider>
+      </UnitPreferenceProvider>
     </AuthProvider>
   </QueryClientProvider>
 );
