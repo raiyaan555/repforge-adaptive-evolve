@@ -54,14 +54,47 @@ export function PastMesocycles() {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
+      // First get the completed mesocycles
+      const { data: completedData, error: completedError } = await supabase
         .from('completed_mesocycles')
         .select('*')
         .eq('user_id', user.id)
         .order('end_date', { ascending: false });
 
-      if (error) throw error;
-      setCompletedMesocycles(data || []);
+      if (completedError) throw completedError;
+
+      // For each completed mesocycle, fetch ALL the workout data from the mesocycle table
+      const enhancedMesocycles = await Promise.all(
+        (completedData || []).map(async (mesocycle) => {
+          // Get all workouts for this mesocycle from the mesocycle table
+          const { data: allWorkouts, error: workoutsError } = await supabase
+            .from('mesocycle')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('plan_id', mesocycle.id)
+            .order('week_number', { ascending: true })
+            .order('day_number', { ascending: true });
+
+          if (workoutsError) {
+            console.error('Error fetching workout data:', workoutsError);
+            return mesocycle; // Return original if fetch fails
+          }
+
+          // If we have workout data from mesocycle table, use it; otherwise use existing data
+          if (allWorkouts && allWorkouts.length > 0) {
+            return {
+              ...mesocycle,
+              mesocycle_data: {
+                workouts: allWorkouts
+              }
+            };
+          }
+
+          return mesocycle;
+        })
+      );
+
+      setCompletedMesocycles(enhancedMesocycles);
     } catch (error) {
       console.error('Error fetching completed mesocycles:', error);
     } finally {
@@ -401,9 +434,6 @@ export function PastMesocycles() {
         </div>
       )}
 
-      <div className="text-center text-sm text-muted-foreground">
-        Showing last 3 completed mesocycles
-      </div>
     </div>
   );
 }
