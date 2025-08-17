@@ -96,15 +96,6 @@ export function WorkoutLog() {
         // 3. Now initialize logs with correct week/day
         await initializeWorkoutLogs(workoutData);
         
-        // 4. Check if we need soreness dialogs for Week 2+
-        console.log(`Current week after initialization: ${currentWeek}`);
-        if (currentWeek >= 2) {
-          console.log(`Week ${currentWeek} detected - triggering soreness checks`);
-          await triggerSorenessChecks(workoutData);
-        } else {
-          console.log(`Week ${currentWeek} - skipping soreness checks (Week 1)`);
-        }
-        
         if (isMounted) {
           setCompletedMuscleGroups(new Set());
           setMuscleGroupFeedbacks(new Map());
@@ -119,20 +110,7 @@ export function WorkoutLog() {
     initializeAll();
     
     return () => { isMounted = false; };
-  }, [user, workoutId, currentWeek]); // Added currentWeek dependency
-
-  // Separate effect to trigger soreness checks when week/day is properly loaded
-  useEffect(() => {
-    const checkSorenessForNewWorkout = async () => {
-      // Only trigger for Week 2+ and when we have all necessary data
-      if (currentWeek >= 2 && workout && user && workoutId) {
-        console.log(`Triggering soreness checks for Week ${currentWeek}, Day ${currentDay}`);
-        await triggerSorenessChecks(workout);
-      }
-    };
-    
-    checkSorenessForNewWorkout();
-  }, [currentWeek, currentDay, workout]); // Trigger when week/day changes
+  }, [user, workoutId]); // Removed currentWeek dependency to prevent loops
 
   const loadActiveWorkoutInfo = async () => {
     try {
@@ -742,34 +720,6 @@ export function WorkoutLog() {
     });
   }, []);
 
-  const triggerSorenessChecks = async (workoutData: any) => {
-    console.log(`Triggering soreness checks for Week ${currentWeek}`);
-    
-    const structure = workoutData.workout_structure as WorkoutStructure;
-    const dayKey = `day${currentDay}`;
-    const dayWorkout = structure[dayKey] || [];
-    const muscleGroups = Array.from(new Set(dayWorkout.map(mg => mg.muscleGroup)));
-    
-    console.log(`Muscle groups to check:`, muscleGroups);
-    
-    // Process muscle groups sequentially
-    for (const mg of muscleGroups) {
-      console.log(`Asking soreness for ${mg}...`);
-      const sc = await promptForSoreness(mg);
-      console.log(`Received soreness response for ${mg}:`, sc);
-      
-      if (sc) {
-        await supabase.from('muscle_soreness').insert({
-          user_id: user.id,
-          workout_date: new Date().toISOString().split('T')[0],
-          muscle_group: mg,
-          soreness_level: sc,
-          healed: sc === 'none'
-        });
-        console.log(`Saved soreness data for ${mg}: ${sc}`);
-      }
-    }
-  };
 
 
   const saveCompletedMesocycle = async () => {
