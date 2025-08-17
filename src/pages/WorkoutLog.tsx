@@ -336,7 +336,7 @@ export function WorkoutLog() {
         console.log(`${mg} pump level: ${pumpByGroup[mg]}`);
       }
 
-      // Sets adjustment table
+      // ✅ FIXED: Sets adjustment table
       const setsAdjustment = (
         sc: 'none'|'medium'|'very_sore'|'extremely_sore'|undefined,
         pump: 'none'|'medium'|'amazing'
@@ -368,21 +368,23 @@ export function WorkoutLog() {
         const prev = prevByExercise.get(log.exercise);
         let newLog = { ...log };
         
-        // Deload logic (simplified - only final week)
+        // ✅ FIXED: Deload logic (final week - reduce to 1/3 except if 1)
         const isDeloadWeek = currentWeek === workoutData.duration_weeks;
         
         if (prev) {
           let baseSets = prev.actual_sets || log.currentSets;
           
           if (isDeloadWeek) {
-            // Deload: reduce by 1/3
-            const deloadSets = Math.max(1, Math.round(baseSets * (2/3)));
+            // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
+            const deloadSets = Math.max(1, Math.round(baseSets * (1/3)));
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
             
             const prevReps = prev.actual_reps?.[0] || newLog.plannedReps;
-            const deloadReps = Math.max(1, Math.round(prevReps * (2/3)));
+            const deloadReps = Math.max(1, Math.round(prevReps * (1/3)));
             newLog.plannedReps = deloadReps;
+            
+            console.log(`DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
           } else if (currentWeek >= 2) {
             // Normal progression using SC + MPC
             const sc = scResults[log.muscleGroup] as any;
@@ -404,8 +406,8 @@ export function WorkoutLog() {
           // Prefill reps based on RPE rule
           const prevReps: number[] = prev.actual_reps || [];
           const prevRpe: number[] = prev.rpe || [];
-          if (prevReps.length && prevRpe.length) {
-            // Use first set's RPE to determine rep progression
+          if (prevReps.length && prevRpe.length && !isDeloadWeek) {
+            // Use first set's RPE to determine rep progression (not during deload)
             const firstRpe = prevRpe[0] || 9;
             const repIncrease = firstRpe <= 8 ? 1 : 0;
             newLog.plannedReps = prevReps[0] + repIncrease;
@@ -418,11 +420,14 @@ export function WorkoutLog() {
         } else {
           // No previous data - handle deload and new exercises
           if (isDeloadWeek) {
-            const deloadSets = Math.max(1, Math.round(newLog.currentSets * (2/3)));
-            const deloadReps = Math.max(1, Math.round(newLog.plannedReps * (2/3)));
+            // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
+            const deloadSets = Math.max(1, Math.round(newLog.currentSets * (1/3)));
+            const deloadReps = Math.max(1, Math.round(newLog.plannedReps * (1/3)));
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
             newLog.plannedReps = deloadReps;
+            
+            console.log(`DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
           } else if (currentWeek >= 2) {
             // Apply SC + MPC even without previous data
             const sc = scResults[log.muscleGroup] as any;
@@ -775,6 +780,9 @@ export function WorkoutLog() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold">Day {currentDay} - Workout Log</h1>
               <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
+              {currentWeek === workout.duration_weeks && (
+                <Badge variant="secondary" className="mt-1">DELOAD WEEK</Badge>
+              )}
             </div>
           </div>
         </div>
@@ -841,6 +849,9 @@ export function WorkoutLog() {
                             </div>
                             <span className="text-xs sm:text-sm text-muted-foreground">
                               Sets: {exercise.currentSets} | Target Reps: {exercise.plannedReps}
+                              {currentWeek === workout.duration_weeks && (
+                                <Badge variant="outline" className="ml-2 text-xs">DELOAD</Badge>
+                              )}
                             </span>
                           </div>
                         
