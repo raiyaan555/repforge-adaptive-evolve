@@ -172,6 +172,12 @@ export function WorkoutLog() {
   };
 
   const initializeWorkoutLogs = async (workoutData: any) => {
+    // Null safety check
+    if (!workoutData || !workoutData.workout_structure) {
+      console.error('Workout data is null or missing structure:', workoutData);
+      return;
+    }
+    
     const structure = workoutData.workout_structure as WorkoutStructure;
     console.log('Workout structure:', structure);
     
