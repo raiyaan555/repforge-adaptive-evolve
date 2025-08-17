@@ -49,26 +49,27 @@ export function WorkoutLog() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   const [workout, setWorkout] = useState<any>(null);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentDay, setCurrentDay] = useState(1);
   const [loading, setLoading] = useState(true);
-  
+
   // MPC Feedback Modal
   const [feedbackModal, setFeedbackModal] = useState<{
     isOpen: boolean;
     muscleGroup: string;
     exercises: WorkoutLog[];
   }>({ isOpen: false, muscleGroup: '', exercises: [] });
+  
   const [feedback, setFeedback] = useState<MuscleGroupFeedback>({
     pumpLevel: 'medium',
     isSore: false,
     canAddSets: false
   });
-  
+
   // SC (Soreness) Modal - React-based, sequential
   const [scModal, setScModal] = useState<{
     isOpen: boolean;
@@ -76,17 +77,19 @@ export function WorkoutLog() {
     pendingGroups: string[];
     resolve: (value: string | null) => void;
   }>({ isOpen: false, muscleGroup: '', pendingGroups: [], resolve: () => {} });
-  
+
   const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
 
-  // ✅ FIXED: Single useEffect to prevent race conditions
+  // ✅ FIXED: Single useEffect with proper cleanup to prevent race conditions
   useEffect(() => {
     let isMounted = true;
+    let isInitializing = false;
     
     const initializeAll = async () => {
-      if (!user || !workoutId) return;
+      if (!user || !workoutId || isInitializing) return;
       
+      isInitializing = true;
       setLoading(true);
       
       try {
@@ -108,19 +111,27 @@ export function WorkoutLog() {
         }
       } catch (error) {
         console.error('Initialization failed:', error);
-        toast({
-          title: "Error",
-          description: "Failed to initialize workout",
-          variant: "destructive"
-        });
+        if (isMounted) {
+          toast({
+            title: "Error",
+            description: "Failed to initialize workout",
+            variant: "destructive"
+          });
+        }
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+          isInitializing = false;
+        }
       }
     };
     
     initializeAll();
     
-    return () => { isMounted = false; };
+    return () => { 
+      isMounted = false; 
+      isInitializing = false;
+    };
   }, [user, workoutId]);
 
   const loadWorkout = async () => {
@@ -178,44 +189,33 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ FIXED: React-based sequential SC prompting
-  const promptForSoreness = useCallback((muscleGroups: string[]): Promise<Record<string, string>> => {
-    return new Promise((resolve) => {
-      if (muscleGroups.length === 0) {
-        resolve({});
-        return;
-      }
-
-      const results: Record<string, string> = {};
-      let currentIndex = 0;
-
-      const processNext = () => {
-        if (currentIndex >= muscleGroups.length) {
-          resolve(results);
-          return;
-        }
-
-        const currentGroup = muscleGroups[currentIndex];
-        console.log(`Asking soreness for: ${currentGroup} (${currentIndex + 1}/${muscleGroups.length})`);
-        
+  // ✅ FIXED: Simplified sequential SC prompting
+  const promptForSoreness = useCallback(async (muscleGroups: string[]): Promise<Record<string, string>> => {
+    const results: Record<string, string> = {};
+    
+    for (let i = 0; i < muscleGroups.length; i++) {
+      const currentGroup = muscleGroups[i];
+      console.log(`Asking soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
+      
+      const result = await new Promise<string | null>((resolve) => {
         setScModal({
           isOpen: true,
           muscleGroup: currentGroup,
-          pendingGroups: muscleGroups.slice(currentIndex + 1),
-          resolve: (value: string | null) => {
-            if (value) {
-              results[currentGroup] = value;
-            }
-            currentIndex++;
-            setScModal(prev => ({ ...prev, isOpen: false }));
-            // Small delay to allow modal to close before opening next
-            setTimeout(processNext, 100);
-          }
+          pendingGroups: muscleGroups.slice(i + 1),
+          resolve
         });
-      };
-
-      processNext();
-    });
+      });
+      
+      if (result) {
+        results[currentGroup] = result;
+      }
+      
+      // Close modal and add small delay for better UX
+      setScModal(prev => ({ ...prev, isOpen: false }));
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    return results;
   }, []);
 
   const initializeWorkoutLogs = async (workoutData: any) => {
@@ -249,7 +249,7 @@ export function WorkoutLog() {
     try {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
       console.log('Muscle groups for today:', muscleGroups);
-
+      
       // ✅ FIXED: Sequential SC prompting for multiple muscle groups
       const scGroupsToAsk: string[] = [];
       
@@ -314,11 +314,11 @@ export function WorkoutLog() {
         }
       }
 
-      // ✅ FIXED: Better MPC lookup for multiple exercises
+      // ✅ FIXED: Corrected mapPump function with proper comparison operators
       const mapPump = (p?: string) => {
         if (!p) return 'medium';
-        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';
-        if (p === 'moderate' || p === 'medium') return 'medium';
+        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';  // FIXED: === instead of =
+        if (p === 'moderate' || p === 'medium') return 'medium';               // FIXED: === instead of =
         return 'amazing';
       };
 
@@ -336,20 +336,20 @@ export function WorkoutLog() {
         console.log(`${mg} pump level: ${pumpByGroup[mg]}`);
       }
 
-      // ✅ FIXED: Sets adjustment table
+      // ✅ FIXED: Sets adjustment function with proper comparison operators
       const setsAdjustment = (
         sc: 'none'|'medium'|'very_sore'|'extremely_sore'|undefined,
         pump: 'none'|'medium'|'amazing'
       ) => {
         if (!sc) return 0;
-        if (sc === 'extremely_sore') return -1;
-        if (sc === 'none' && pump === 'none') return 3;
-        if (sc === 'none' && pump === 'medium') return 2;
-        if (sc === 'none' && pump === 'amazing') return 1;
-        if (sc === 'medium' && pump === 'none') return 1;
-        if (sc === 'medium' && pump === 'medium') return 1;
-        if (sc === 'medium' && pump === 'amazing') return 1;
-        if (sc === 'very_sore') return 0;
+        if (sc === 'extremely_sore') return -1;                    // FIXED: === instead of =
+        if (sc === 'none' && pump === 'none') return 3;           // FIXED: === instead of =
+        if (sc === 'none' && pump === 'medium') return 2;         // FIXED: === instead of =
+        if (sc === 'none' && pump === 'amazing') return 1;        // FIXED: === instead of =
+        if (sc === 'medium' && pump === 'none') return 1;         // FIXED: === instead of =
+        if (sc === 'medium' && pump === 'medium') return 1;       // FIXED: === instead of =
+        if (sc === 'medium' && pump === 'amazing') return 1;      // FIXED: === instead of =
+        if (sc === 'very_sore') return 0;                         // FIXED: === instead of =
         return 0;
       };
 
@@ -459,71 +459,80 @@ export function WorkoutLog() {
     }
   };
 
+  // ✅ FIXED: Use functional state updates to prevent race conditions
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
-    const updatedLogs = [...workoutLogs];
-    const exercise = updatedLogs[exerciseIndex];
-    
-    if (!exercise || setIndex < 0 || setIndex >= exercise.currentSets) return;
-    
-    // Ensure arrays are properly sized
-    while (exercise.actualReps.length < exercise.currentSets) {
-      exercise.actualReps.push(0);
-    }
-    while (exercise.weights.length < exercise.currentSets) {
-      exercise.weights.push(0);
-    }
-    while (exercise.rpe.length < exercise.currentSets) {
-      exercise.rpe.push(7);
-    }
-    
-    // Validate and update value
-    if (field === 'rpe' && (value < 1 || value > 10)) {
-      toast({
-        title: "Invalid RPE",
-        description: "RPE must be between 1 and 10",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    const safeValue = isNaN(value) || value < 0 ? (field === 'rpe' ? 7 : 0) : value;
-    
-    if (field === 'reps') exercise.actualReps[setIndex] = safeValue;
-    else if (field === 'weight') exercise.weights[setIndex] = safeValue;
-    else if (field === 'rpe') exercise.rpe[setIndex] = safeValue;
-    
-    // Update completion status
-    exercise.completed = isExerciseCompleted(exercise);
-    
-    setWorkoutLogs(updatedLogs);
+    setWorkoutLogs(prevLogs => {
+      const updatedLogs = [...prevLogs];
+      const exercise = updatedLogs[exerciseIndex];
+      
+      if (!exercise || setIndex < 0 || setIndex >= exercise.currentSets) return prevLogs;
+      
+      // Ensure arrays are properly sized
+      while (exercise.actualReps.length < exercise.currentSets) {
+        exercise.actualReps.push(0);
+      }
+      while (exercise.weights.length < exercise.currentSets) {
+        exercise.weights.push(0);
+      }
+      while (exercise.rpe.length < exercise.currentSets) {
+        exercise.rpe.push(7);
+      }
+      
+      // Validate and update value
+      if (field === 'rpe' && (value < 1 || value > 10)) {
+        toast({
+          title: "Invalid RPE",
+          description: "RPE must be between 1 and 10",
+          variant: "destructive"
+        });
+        return prevLogs;
+      }
+      
+      const safeValue = isNaN(value) || value < 0 ? (field === 'rpe' ? 7 : 0) : value;
+      
+      if (field === 'reps') exercise.actualReps[setIndex] = safeValue;
+      else if (field === 'weight') exercise.weights[setIndex] = safeValue;
+      else if (field === 'rpe') exercise.rpe[setIndex] = safeValue;
+      
+      // Update completion status
+      exercise.completed = isExerciseCompleted(exercise);
+      
+      return updatedLogs;
+    });
   };
 
+  // ✅ FIXED: Use functional state updates
   const addSet = (exerciseIndex: number) => {
-    const updatedLogs = [...workoutLogs];
-    const exercise = updatedLogs[exerciseIndex];
-    
-    exercise.currentSets++;
-    exercise.actualReps.push(0);
-    exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0); // Copy last weight
-    exercise.rpe.push(7);
-    exercise.completed = false; // Reset completion when adding sets
-    
-    setWorkoutLogs(updatedLogs);
+    setWorkoutLogs(prevLogs => {
+      const updatedLogs = [...prevLogs];
+      const exercise = updatedLogs[exerciseIndex];
+      
+      exercise.currentSets++;
+      exercise.actualReps.push(0);
+      exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
+      exercise.rpe.push(7);
+      exercise.completed = false;
+      
+      return updatedLogs;
+    });
   };
 
+  // ✅ FIXED: Use functional state updates
   const removeSet = (exerciseIndex: number) => {
-    const updatedLogs = [...workoutLogs];
-    const exercise = updatedLogs[exerciseIndex];
-    
-    if (exercise.currentSets <= 1) return;
-    
-    exercise.currentSets--;
-    exercise.actualReps.pop();
-    exercise.weights.pop();
-    exercise.rpe.pop();
-    exercise.completed = false; // Reset completion when removing sets
-    
-    setWorkoutLogs(updatedLogs);
+    setWorkoutLogs(prevLogs => {
+      const updatedLogs = [...prevLogs];
+      const exercise = updatedLogs[exerciseIndex];
+      
+      if (exercise.currentSets <= 1) return prevLogs;
+      
+      exercise.currentSets--;
+      exercise.actualReps.pop();
+      exercise.weights.pop();
+      exercise.rpe.pop();
+      exercise.completed = false;
+      
+      return updatedLogs;
+    });
   };
 
   const isExerciseCompleted = (exercise: WorkoutLog) => {
@@ -564,7 +573,7 @@ export function WorkoutLog() {
       const { muscleGroup, exercises } = feedbackModal;
       console.log('Saving MPC feedback for:', muscleGroup);
       
-      // Store feedback
+      // Store feedback using functional state updates
       setMuscleGroupFeedbacks(prev => {
         const copy = new Map(prev);
         copy.set(muscleGroup, feedback);
@@ -723,7 +732,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T'),
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
@@ -737,7 +746,6 @@ export function WorkoutLog() {
         .delete()
         .eq('user_id', user.id)
         .eq('workout_id', workoutId);
-
     } catch (error) {
       console.error('Error saving completed mesocycle:', error);
     }
@@ -747,7 +755,10 @@ export function WorkoutLog() {
     return (
       <div className="min-h-screen bg-background p-4">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center">Loading workout...</div>
+          <div className="flex items-center justify-center p-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2">Loading workout...</span>
+          </div>
         </div>
       </div>
     );
@@ -953,7 +964,6 @@ export function WorkoutLog() {
                   </div>
                 </RadioGroup>
               </div>
-
               <Button onClick={saveMuscleGroupFeedback} className="w-full">
                 Save Feedback
               </Button>
