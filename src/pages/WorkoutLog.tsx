@@ -96,6 +96,15 @@ export function WorkoutLog() {
         // 3. Now initialize logs with correct week/day
         await initializeWorkoutLogs(workoutData);
         
+        // 4. Check if we need soreness dialogs for Week 2+
+        console.log(`Current week after initialization: ${currentWeek}`);
+        if (currentWeek >= 2) {
+          console.log(`Week ${currentWeek} detected - triggering soreness checks`);
+          await triggerSorenessChecks(workoutData);
+        } else {
+          console.log(`Week ${currentWeek} - skipping soreness checks (Week 1)`);
+        }
+        
         if (isMounted) {
           setCompletedMuscleGroups(new Set());
           setMuscleGroupFeedbacks(new Map());
@@ -110,7 +119,20 @@ export function WorkoutLog() {
     initializeAll();
     
     return () => { isMounted = false; };
-  }, [user, workoutId]);
+  }, [user, workoutId, currentWeek]); // Added currentWeek dependency
+
+  // Separate effect to trigger soreness checks when week/day is properly loaded
+  useEffect(() => {
+    const checkSorenessForNewWorkout = async () => {
+      // Only trigger for Week 2+ and when we have all necessary data
+      if (currentWeek >= 2 && workout && user && workoutId) {
+        console.log(`Triggering soreness checks for Week ${currentWeek}, Day ${currentDay}`);
+        await triggerSorenessChecks(workout);
+      }
+    };
+    
+    checkSorenessForNewWorkout();
+  }, [currentWeek, currentDay, workout]); // Trigger when week/day changes
 
   const loadActiveWorkoutInfo = async () => {
     try {
@@ -205,9 +227,18 @@ export function WorkoutLog() {
     try {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
 
+      console.log(`Initializing workout logs for Week ${currentWeek}, Day ${currentDay}`);
+      
       // Ask SC at start: Week 2+ always; Week 1 only if muscle group repeats earlier in the same week
       const scByGroup: Record<string, 'none'|'medium'|'very_sore'|'extremely_sore'> = {};
-      if (user) {
+      
+      // Only ask for soreness if we're in Week 2+ OR if it's Week 1 with repeated muscle groups
+      const shouldCheckSoreness = currentWeek >= 2 || (currentWeek === 1 && currentDay > 1);
+      console.log(`Should check soreness: ${shouldCheckSoreness} (Week ${currentWeek}, Day ${currentDay})`);
+      
+      if (shouldCheckSoreness && user) {
+        console.log(`Starting soreness checks for muscle groups:`, muscleGroups);
+        
         // Process muscle groups sequentially to avoid overlapping dialogs
         for (const mg of muscleGroups) {
           let shouldAsk = currentWeek >= 2;
@@ -710,6 +741,35 @@ export function WorkoutLog() {
       setScPrompt({ isOpen: true, muscleGroup, resolve });
     });
   }, []);
+
+  const triggerSorenessChecks = async (workoutData: any) => {
+    console.log(`Triggering soreness checks for Week ${currentWeek}`);
+    
+    const structure = workoutData.workout_structure as WorkoutStructure;
+    const dayKey = `day${currentDay}`;
+    const dayWorkout = structure[dayKey] || [];
+    const muscleGroups = Array.from(new Set(dayWorkout.map(mg => mg.muscleGroup)));
+    
+    console.log(`Muscle groups to check:`, muscleGroups);
+    
+    // Process muscle groups sequentially
+    for (const mg of muscleGroups) {
+      console.log(`Asking soreness for ${mg}...`);
+      const sc = await promptForSoreness(mg);
+      console.log(`Received soreness response for ${mg}:`, sc);
+      
+      if (sc) {
+        await supabase.from('muscle_soreness').insert({
+          user_id: user.id,
+          workout_date: new Date().toISOString().split('T')[0],
+          muscle_group: mg,
+          soreness_level: sc,
+          healed: sc === 'none'
+        });
+        console.log(`Saved soreness data for ${mg}: ${sc}`);
+      }
+    }
+  };
 
 
   const saveCompletedMesocycle = async () => {
