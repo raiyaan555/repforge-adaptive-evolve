@@ -70,29 +70,46 @@ export function WorkoutLog() {
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (workoutId && user) {
-      loadWorkout();
-    }
-  }, [workoutId, user]);
+  // Add loading state for processing feedback
+  const [isProcessingFeedback, setIsProcessingFeedback] = useState(false);
 
+  // Single useEffect to handle all data loading sequentially
   useEffect(() => {
-    // Load current week and day from active workout
-    if (user && workoutId) {
-      loadActiveWorkoutInfo();
-    }
+    let isMounted = true;
+    
+    const initializeAllData = async () => {
+      if (!user || !workoutId) return;
+      
+      setLoading(true);
+      
+      try {
+        // 1. Load workout data first
+        const workoutData = await loadWorkout();
+        if (!isMounted || !workoutData) return;
+        
+        // 2. Load active workout info (week/day)
+        const activeInfo = await loadActiveWorkoutInfo();
+        if (!isMounted) return;
+        
+        // 3. Initialize logs with proper data
+        await initializeWorkoutLogs(workoutData);
+        
+        // 4. Reset state for new day
+        if (isMounted) {
+          setCompletedMuscleGroups(new Set());
+          setMuscleGroupFeedbacks(new Map());
+        }
+      } catch (error) {
+        console.error('Error initializing workout data:', error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    
+    initializeAllData();
+    
+    return () => { isMounted = false; };
   }, [user, workoutId]);
-
-  useEffect(() => {
-    // Re-initialize workout logs when currentDay changes
-    if (workout && currentDay) {
-      console.log('Reinitializing workout logs for day:', currentDay);
-      initializeWorkoutLogs(workout);
-      // Reset muscle group completion state for new day
-      setCompletedMuscleGroups(new Set());
-      setMuscleGroupFeedbacks(new Map());
-    }
-  }, [currentDay, workout]);
 
   const loadActiveWorkoutInfo = async () => {
     try {
@@ -107,16 +124,17 @@ export function WorkoutLog() {
         console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
         setCurrentWeek(activeWorkout.current_week);
         setCurrentDay(activeWorkout.current_day);
+        return activeWorkout; // Return the data
       }
+      return null;
     } catch (error) {
       console.error('Error loading active workout info:', error);
+      return null;
     }
   };
 
   const loadWorkout = async () => {
     try {
-      setLoading(true);
-      
       // Load workout from either default_workouts or custom_workouts
       let { data: defaultWorkout } = await supabase
         .from('default_workouts')
@@ -139,8 +157,9 @@ export function WorkoutLog() {
 
       if (defaultWorkout) {
         setWorkout(defaultWorkout);
-        // Don't initialize logs here - wait until currentDay is loaded
+        return defaultWorkout; // Return the data
       }
+      return null;
     } catch (error) {
       console.error('Error loading workout:', error);
       toast({
@@ -148,8 +167,7 @@ export function WorkoutLog() {
         description: "Failed to load workout details",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
+      return null;
     }
   };
 
@@ -349,72 +367,84 @@ export function WorkoutLog() {
 
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
     const updatedLogs = [...workoutLogs];
+    const exercise = updatedLogs[exerciseIndex];
     
-    // Ensure arrays are long enough
-    while (updatedLogs[exerciseIndex].actualReps.length <= setIndex) {
-      updatedLogs[exerciseIndex].actualReps.push(0);
+    // Validation
+    if (!exercise || setIndex < 0 || setIndex >= exercise.currentSets) return;
+    
+    // CRITICAL FIX: Ensure all arrays match currentSets length
+    while (exercise.actualReps.length < exercise.currentSets) {
+      exercise.actualReps.push(0);
     }
-    while (updatedLogs[exerciseIndex].weights.length <= setIndex) {
-      updatedLogs[exerciseIndex].weights.push(0);
+    while (exercise.weights.length < exercise.currentSets) {
+      exercise.weights.push(0);
     }
-    while (updatedLogs[exerciseIndex].rpe.length <= setIndex) {
-      updatedLogs[exerciseIndex].rpe.push(7);
+    while (exercise.rpe.length < exercise.currentSets) {
+      exercise.rpe.push(7);
     }
     
-    // Prevent NaN values - enforce zero as fallback (except for RPE which has a minimum of 1)
-    const safeValue = isNaN(value) || value < 0 ? (field === 'rpe' ? 1 : 0) : value;
+    // Truncate if too long
+    exercise.actualReps = exercise.actualReps.slice(0, exercise.currentSets);
+    exercise.weights = exercise.weights.slice(0, exercise.currentSets);
+    exercise.rpe = exercise.rpe.slice(0, exercise.currentSets);
     
-    if (field === 'reps') {
-      updatedLogs[exerciseIndex].actualReps[setIndex] = safeValue;
-    } else if (field === 'weight') {
-      updatedLogs[exerciseIndex].weights[setIndex] = safeValue;
-    } else if (field === 'rpe') {
-      // Validate RPE is between 1 and 10
-      if (value < 1 || value > 10) {
+    // Validate value
+    let safeValue = value;
+    if (field === 'rpe') {
+      if (value < 1 || value > 10 || isNaN(value)) {
         toast({
           title: "Invalid RPE",
           description: "RPE must be between 1 and 10",
           variant: "destructive"
         });
-        return; // Don't update if invalid
+        return;
       }
-      updatedLogs[exerciseIndex].rpe[setIndex] = safeValue;
+    } else if (isNaN(value) || value < 0) {
+      safeValue = 0;
     }
     
-    // Auto-update completed status if all sets have valid data
-    const isCompleted = isExerciseCompleted(updatedLogs[exerciseIndex]);
-    if (isCompleted) {
-      updatedLogs[exerciseIndex].completed = true;
-    }
+    // Update the field
+    if (field === 'reps') exercise.actualReps[setIndex] = safeValue;
+    else if (field === 'weight') exercise.weights[setIndex] = safeValue;
+    else if (field === 'rpe') exercise.rpe[setIndex] = safeValue;
+    
+    // Update completion status
+    exercise.completed = isExerciseCompleted(exercise);
     
     setWorkoutLogs(updatedLogs);
-    
-    // Manual completion only; no auto-trigger on set updates
   };
 
   const addSet = (exerciseIndex: number) => {
     const updatedLogs = [...workoutLogs];
-    updatedLogs[exerciseIndex].currentSets++;
-    updatedLogs[exerciseIndex].actualReps.push(0);
-    updatedLogs[exerciseIndex].weights.push(0);
-    updatedLogs[exerciseIndex].rpe.push(7); // Default RPE for new set
+    const exercise = updatedLogs[exerciseIndex];
+    
+    exercise.currentSets++;
+    exercise.actualReps.push(0);
+    exercise.weights.push(0);
+    exercise.rpe.push(7);
+    
+    // Reset completion status since we added a set
+    exercise.completed = false;
+    
     setWorkoutLogs(updatedLogs);
   };
 
   const removeSet = (exerciseIndex: number) => {
     const updatedLogs = [...workoutLogs];
+    const exercise = updatedLogs[exerciseIndex];
+    
     // Minimum 1 set requirement
-    if (updatedLogs[exerciseIndex].currentSets > 1) {
-      updatedLogs[exerciseIndex].currentSets--;
-      updatedLogs[exerciseIndex].actualReps.pop();
-      updatedLogs[exerciseIndex].weights.pop();
-      updatedLogs[exerciseIndex].rpe.pop();
-      
-      // Reset completed status if removing sets
-      updatedLogs[exerciseIndex].completed = false;
-      
-      setWorkoutLogs(updatedLogs);
-    }
+    if (exercise.currentSets <= 1) return;
+    
+    exercise.currentSets--;
+    exercise.actualReps.pop();
+    exercise.weights.pop();
+    exercise.rpe.pop();
+    
+    // Reset completion status
+    exercise.completed = false;
+    
+    setWorkoutLogs(updatedLogs);
   };
   
   // Check if all exercises in a muscle group are completed and auto-complete the muscle group
@@ -471,6 +501,10 @@ export function WorkoutLog() {
   };
 
   const saveMuscleGroupFeedback = async () => {
+    if (isProcessingFeedback) return; // Prevent double submission
+    
+    setIsProcessingFeedback(true);
+    
     try {
       const { muscleGroup, exercises } = feedbackModal;
       console.log('Saving feedback for muscle group:', muscleGroup);
@@ -543,6 +577,8 @@ export function WorkoutLog() {
         description: "Failed to save muscle group feedback",
         variant: "destructive"
       });
+    } finally {
+      setIsProcessingFeedback(false);
     }
   };
 
