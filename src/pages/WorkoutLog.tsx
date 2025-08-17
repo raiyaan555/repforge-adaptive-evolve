@@ -286,6 +286,17 @@ export function WorkoutLog() {
             const deloadSets = Math.max(1, Math.round(baseSets * 0.65));
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
+          } else if ([5, 7, 9].includes(currentWeek)) {
+            // Deload weeks 5, 7, 9 - reduce by 1/3
+            const deloadSets = Math.max(1, Math.round(baseSets * 2/3));
+            newLog.plannedSets = deloadSets;
+            newLog.currentSets = deloadSets;
+            // Also reduce reps by 1/3
+            const prevReps: number[] = prev.actual_reps || [];
+            if (prevReps.length) {
+              const deloadReps = Math.max(1, Math.round(prevReps[0] * 2/3));
+              newLog.plannedReps = deloadReps;
+            }
           } else if (currentWeek >= 2) {
             const sc = scByGroup[log.muscleGroup];
             const pump = pumpByGroup[log.muscleGroup] || 'medium';
@@ -315,6 +326,16 @@ export function WorkoutLog() {
           const deloadSets = Math.max(1, Math.round(newLog.currentSets * 0.65));
           newLog.plannedSets = deloadSets;
           newLog.currentSets = deloadSets;
+          newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
+          newLog.weights = Array.from({ length: newLog.currentSets }, () => 0);
+          newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
+        } else if ([5, 7, 9].includes(currentWeek)) {
+          // Deload weeks 5, 7, 9 - reduce by 1/3 (no previous data)
+          const deloadSets = Math.max(1, Math.round(newLog.currentSets * 2/3));
+          const deloadReps = Math.max(1, Math.round(newLog.plannedReps * 2/3));
+          newLog.plannedSets = deloadSets;
+          newLog.currentSets = deloadSets;
+          newLog.plannedReps = deloadReps;
           newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
           newLog.weights = Array.from({ length: newLog.currentSets }, () => 0);
           newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
