@@ -306,7 +306,7 @@ export function WorkoutLog() {
         if (prev) {
           let baseSets = prev.actual_sets || log.currentSets;
           // Deload on final week
-          if (currentWeek === workout.duration_weeks) {
+          if (currentWeek === workoutData.duration_weeks) {
             const deloadSets = Math.max(1, Math.round(baseSets * 0.65));
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
@@ -334,7 +334,7 @@ export function WorkoutLog() {
           // Resize arrays for reps and rpe to match target sets
           newLog.actualReps = Array.from({ length: newLog.currentSets }, (_, i) => 0);
           newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 7);
-        } else if (currentWeek === workout.duration_weeks) {
+        } else if (currentWeek === workoutData.duration_weeks) {
           // No previous data but final week: still reduce default sets
           const deloadSets = Math.max(1, Math.round(newLog.currentSets * 0.65));
           newLog.plannedSets = deloadSets;
