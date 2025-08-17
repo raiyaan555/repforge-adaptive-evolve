@@ -69,30 +69,48 @@ export function WorkoutLog() {
   const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [scPrompt, setScPrompt] = useState<{
+    isOpen: boolean;
+    muscleGroup: string;
+    resolve: (value: string | null) => void;
+  }>({ isOpen: false, muscleGroup: '', resolve: () => {} });
 
+  // Consolidated initialization to avoid race conditions
   useEffect(() => {
-    if (workoutId && user) {
-      loadWorkout();
-    }
-  }, [workoutId, user]);
-
-  useEffect(() => {
-    // Load current week and day from active workout
-    if (user && workoutId) {
-      loadActiveWorkoutInfo();
-    }
+    let isMounted = true;
+    
+    const initializeAll = async () => {
+      if (!user || !workoutId) return;
+      
+      setLoading(true);
+      
+      try {
+        // 1. Load workout data
+        const workoutData = await loadWorkout();
+        if (!isMounted || !workoutData) return;
+        
+        // 2. Load active workout info
+        const activeInfo = await loadActiveWorkoutInfo();  
+        if (!isMounted) return;
+        
+        // 3. Now initialize logs with correct week/day
+        await initializeWorkoutLogs(workoutData);
+        
+        if (isMounted) {
+          setCompletedMuscleGroups(new Set());
+          setMuscleGroupFeedbacks(new Map());
+        }
+      } catch (error) {
+        console.error('Initialization failed:', error);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    
+    initializeAll();
+    
+    return () => { isMounted = false; };
   }, [user, workoutId]);
-
-  useEffect(() => {
-    // Re-initialize workout logs when currentDay changes
-    if (workout && currentDay) {
-      console.log('Reinitializing workout logs for day:', currentDay);
-      initializeWorkoutLogs(workout);
-      // Reset muscle group completion state for new day
-      setCompletedMuscleGroups(new Set());
-      setMuscleGroupFeedbacks(new Map());
-    }
-  }, [currentDay, workout]);
 
   const loadActiveWorkoutInfo = async () => {
     try {
@@ -107,16 +125,17 @@ export function WorkoutLog() {
         console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
         setCurrentWeek(activeWorkout.current_week);
         setCurrentDay(activeWorkout.current_day);
+        return activeWorkout;
       }
+      return null;
     } catch (error) {
       console.error('Error loading active workout info:', error);
+      return null;
     }
   };
 
   const loadWorkout = async () => {
     try {
-      setLoading(true);
-      
       // Load workout from either default_workouts or custom_workouts
       let { data: defaultWorkout } = await supabase
         .from('default_workouts')
@@ -139,8 +158,9 @@ export function WorkoutLog() {
 
       if (defaultWorkout) {
         setWorkout(defaultWorkout);
-        // Don't initialize logs here - wait until currentDay is loaded
+        return defaultWorkout;
       }
+      return null;
     } catch (error) {
       console.error('Error loading workout:', error);
       toast({
@@ -148,8 +168,7 @@ export function WorkoutLog() {
         description: "Failed to load workout details",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
+      return null;
     }
   };
 
@@ -218,21 +237,28 @@ export function WorkoutLog() {
         }
       }
 
-      // Load last week's data for prefill
+      // Load last week's data for prefill with error handling
       const prevWeek = currentWeek - 1;
       let prevRows: any[] = [];
       if (prevWeek >= 1 && user) {
-        const { data: rows } = await supabase
-          .from('mesocycle')
-          .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, day_number')
-          .eq('user_id', user.id)
-          .eq('plan_id', workoutId)
-          .eq('week_number', prevWeek)
-          .in('muscle_group', muscleGroups);
-        prevRows = rows || [];
+        try {
+          const { data: rows, error } = await supabase
+            .from('mesocycle')
+            .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, day_number')
+            .eq('user_id', user.id)
+            .eq('plan_id', workoutId)
+            .eq('week_number', prevWeek)
+            .in('muscle_group', muscleGroups);
+            
+          if (error) throw error;
+          prevRows = rows || [];
+        } catch (error) {
+          console.error('Failed to load previous week data:', error);
+          prevRows = []; // Fallback to empty array
+        }
       }
 
-      // Compute pump per group from last week (mode) and map to new scale
+      // Simplified MPC lookup - use most recent pump level
       const mapPump = (p?: string) => {
         if (!p) return 'medium';
         if (p === 'negligible' || p === 'low' || p === 'none') return 'none';
@@ -241,14 +267,12 @@ export function WorkoutLog() {
       };
       const pumpByGroup: Record<string, 'none'|'medium'|'amazing'> = {};
       for (const mg of muscleGroups) {
-        const pumps = prevRows.filter(r => r.muscle_group === mg).map(r => mapPump(r.pump_level));
-        if (pumps.length) {
-          const counts: Record<string, number> = {};
-          pumps.forEach(p => counts[p] = (counts[p] || 0) + 1);
-          pumpByGroup[mg] = (Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0] as any) || 'medium';
-        } else {
-          pumpByGroup[mg] = 'medium';
-        }
+        // Get most recent pump level for this muscle group
+        const recent = prevRows
+          .filter(r => r.muscle_group === mg && r.pump_level)
+          .sort((a, b) => (b.day_number || 0) - (a.day_number || 0))[0];
+          
+        pumpByGroup[mg] = recent ? mapPump(recent.pump_level) : 'medium';
       }
 
       // Helper: sets adjustment table
@@ -673,38 +697,7 @@ export function WorkoutLog() {
 
   const promptForSoreness = (muscleGroup: string): Promise<string | null> => {
     return new Promise((resolve) => {
-      const overlay = document.createElement('div');
-      overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
-      
-      const dialog = document.createElement('div');
-      dialog.className = 'bg-background border border-border rounded-lg max-w-md mx-4 shadow-lg';
-      
-      dialog.innerHTML = `
-        <div class="p-6">
-          <h3 class="text-lg font-semibold mb-4 text-foreground">How sore are you before training ${muscleGroup} today?</h3>
-          <div class="space-y-2">
-            <button data-value="none" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">None/Negligible</button>
-            <button data-value="medium" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Medium</button>
-            <button data-value="very_sore" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Very Sore</button>
-            <button data-value="extremely_sore" class="w-full p-3 text-left border border-input rounded-md hover:bg-accent hover:text-accent-foreground transition-colors">Extremely Sore</button>
-          </div>
-        </div>
-      `;
-      
-      overlay.appendChild(dialog);
-      document.body.appendChild(overlay);
-      
-      overlay.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.hasAttribute('data-value')) {
-          const value = target.getAttribute('data-value');
-          document.body.removeChild(overlay);
-          resolve(value);
-        } else if (e.target === overlay) {
-          document.body.removeChild(overlay);
-          resolve(null);
-        }
-      });
+      setScPrompt({ isOpen: true, muscleGroup, resolve });
     });
   };
 
@@ -1005,11 +998,6 @@ export function WorkoutLog() {
               <DialogTitle className="text-lg">Muscle Group Feedback</DialogTitle>
             </DialogHeader>
             <div className="space-y-6">
-              {(() => {
-                console.log('Rendering feedback modal for muscle group:', feedbackModal.muscleGroup);
-                console.log('Modal isOpen:', feedbackModal.isOpen);
-                return null;
-              })()}
               <div>
                 <Label className="text-sm font-medium mb-3 block">
                   Muscle Pump Calculation (MPC) for {feedbackModal.muscleGroup}
@@ -1033,13 +1021,47 @@ export function WorkoutLog() {
                 </RadioGroup>
               </div>
 
-
-              <Button onClick={() => {
-                console.log('Save Feedback button clicked for:', feedbackModal.muscleGroup);
-                saveMuscleGroupFeedback();
-              }} className="w-full">
+              <Button onClick={saveMuscleGroupFeedback} className="w-full">
                 Save Feedback
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Soreness Check Dialog */}
+        <Dialog open={scPrompt.isOpen} onOpenChange={(open) => {
+          if (!open) {
+            scPrompt.resolve(null);
+            setScPrompt({ isOpen: false, muscleGroup: '', resolve: () => {} });
+          }
+        }}>
+          <DialogContent className="max-w-sm sm:max-w-md mx-4">
+            <DialogHeader>
+              <DialogTitle className="text-lg">Soreness Check: {scPrompt.muscleGroup}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Label className="text-sm">How sore are you before training {scPrompt.muscleGroup} today?</Label>
+              <RadioGroup onValueChange={(value) => {
+                scPrompt.resolve(value);
+                setScPrompt({ isOpen: false, muscleGroup: '', resolve: () => {} });
+              }}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="none" id="sc-none" />
+                  <Label htmlFor="sc-none">None/Negligible</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="medium" id="sc-medium" />
+                  <Label htmlFor="sc-medium">Medium</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="very_sore" id="sc-very-sore" />
+                  <Label htmlFor="sc-very-sore">Very Sore</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="extremely_sore" id="sc-extremely-sore" />
+                  <Label htmlFor="sc-extremely-sore">Extremely Sore</Label>
+                </div>
+              </RadioGroup>
             </div>
           </DialogContent>
         </Dialog>
