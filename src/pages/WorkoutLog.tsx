@@ -406,9 +406,9 @@ export function WorkoutLog() {
           const prevRpe: number[] = prev.rpe || [];
           if (prevReps.length && prevRpe.length) {
             // Use first set's RPE to determine rep progression
-            const avgRpe = prevRpe || 9;
-            const repIncrease = avgRpe <= 8 ? 1 : 0;
-            newLog.plannedReps = prevReps + repIncrease;
+            const firstRpe = prevRpe[0] || 9;
+            const repIncrease = firstRpe <= 8 ? 1 : 0;
+            newLog.plannedReps = prevReps[0] + repIncrease;
           }
 
           // Resize arrays to match current sets
@@ -718,7 +718,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T'),
+          end_date: new Date().toISOString().split('T')[0],
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
