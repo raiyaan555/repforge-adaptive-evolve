@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -1038,9 +1038,11 @@ export function WorkoutLog() {
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
               <DialogTitle className="text-lg">Soreness Check: {scPrompt.muscleGroup}</DialogTitle>
+              <DialogDescription className="text-sm">
+                How sore are you before training {scPrompt.muscleGroup} today?
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <Label className="text-sm">How sore are you before training {scPrompt.muscleGroup} today?</Label>
               <RadioGroup onValueChange={(value) => {
                 scPrompt.resolve(value);
                 setScPrompt({ isOpen: false, muscleGroup: '', resolve: () => {} });
