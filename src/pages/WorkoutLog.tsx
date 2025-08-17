@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -110,7 +110,7 @@ export function WorkoutLog() {
     initializeAll();
     
     return () => { isMounted = false; };
-  }, [user, workoutId]); // Removed currentWeek dependency to prevent loops
+  }, [user, workoutId]);
 
   const loadActiveWorkoutInfo = async () => {
     try {
@@ -205,23 +205,11 @@ export function WorkoutLog() {
     try {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
 
-      console.log(`Initializing workout logs for Week ${currentWeek}, Day ${currentDay}`);
-      
       // Ask SC at start: Week 2+ always; Week 1 only if muscle group repeats earlier in the same week
       const scByGroup: Record<string, 'none'|'medium'|'very_sore'|'extremely_sore'> = {};
-      
-      // Only ask for soreness if we're in Week 2+ OR if it's Week 1 with repeated muscle groups
-      const shouldCheckSoreness = currentWeek >= 2 || (currentWeek === 1 && currentDay > 1);
-      console.log(`Should check soreness: ${shouldCheckSoreness} (Week ${currentWeek}, Day ${currentDay})`);
-      
-      if (shouldCheckSoreness && user) {
-        console.log(`Starting soreness checks for muscle groups:`, muscleGroups);
-        
-        // Process muscle groups sequentially to avoid overlapping dialogs
+      if (user) {
         for (const mg of muscleGroups) {
           let shouldAsk = currentWeek >= 2;
-          console.log(`Week ${currentWeek}: shouldAsk for ${mg}:`, shouldAsk);
-          
           if (!shouldAsk && currentWeek === 1) {
             const { data: sameWeek } = await supabase
               .from('mesocycle')
@@ -232,14 +220,9 @@ export function WorkoutLog() {
               .eq('muscle_group', mg)
               .lt('day_number', currentDay);
             shouldAsk = (sameWeek || []).length > 0;
-            console.log(`Week 1 repeat check for ${mg}:`, shouldAsk, sameWeek);
           }
-          
           if (shouldAsk) {
-            console.log(`Prompting soreness for ${mg}...`);
             const sc = await promptForSoreness(mg);
-            console.log(`Received soreness response for ${mg}:`, sc);
-            
             if (sc) {
               scByGroup[mg] = sc as any;
               await supabase.from('muscle_soreness').insert({
@@ -249,7 +232,6 @@ export function WorkoutLog() {
                 soreness_level: sc,
                 healed: sc === 'none'
               });
-              console.log(`Saved soreness data for ${mg}: ${sc}`);
             }
           }
         }
@@ -713,13 +695,11 @@ export function WorkoutLog() {
     }
   };
 
-  const promptForSoreness = useCallback((muscleGroup: string): Promise<string | null> => {
+  const promptForSoreness = (muscleGroup: string): Promise<string | null> => {
     return new Promise((resolve) => {
-      console.log('Opening soreness dialog for:', muscleGroup);
       setScPrompt({ isOpen: true, muscleGroup, resolve });
     });
-  }, []);
-
+  };
 
 
   const saveCompletedMesocycle = async () => {
@@ -871,16 +851,6 @@ export function WorkoutLog() {
               <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
             </div>
           </div>
-          
-          {/* Temporary test button */}
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => promptForSoreness('Test Muscle')}
-            className="text-xs"
-          >
-            Test Soreness Dialog
-          </Button>
           
         </div>
 
@@ -1068,11 +1038,9 @@ export function WorkoutLog() {
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
               <DialogTitle className="text-lg">Soreness Check: {scPrompt.muscleGroup}</DialogTitle>
-              <DialogDescription className="text-sm">
-                How sore are you before training {scPrompt.muscleGroup} today?
-              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <Label className="text-sm">How sore are you before training {scPrompt.muscleGroup} today?</Label>
               <RadioGroup onValueChange={(value) => {
                 scPrompt.resolve(value);
                 setScPrompt({ isOpen: false, muscleGroup: '', resolve: () => {} });
