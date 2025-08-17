@@ -92,25 +92,39 @@ export function WorkoutLog() {
       isInitializing = true;
       setLoading(true);
       
+      console.log('🔍 DEBUG - Starting initialization...');
+      console.log('🔍 DEBUG - User:', user?.id);
+      console.log('🔍 DEBUG - WorkoutId:', workoutId);
+      
       try {
         // 1. Load workout data first
+        console.log('🔍 DEBUG - Loading workout data...');
         const workoutData = await loadWorkout();
-        if (!isMounted || !workoutData) return;
+        if (!isMounted || !workoutData) {
+          console.log('🔍 DEBUG - No workout data or component unmounted');
+          return;
+        }
         
         // 2. Load active workout info (week/day)
+        console.log('🔍 DEBUG - Loading active workout info...');
         const activeInfo = await loadActiveWorkoutInfo();
-        if (!isMounted) return;
+        if (!isMounted) {
+          console.log('🔍 DEBUG - Component unmounted after loading active info');
+          return;
+        }
         
         // 3. Initialize workout logs with proper sequencing
+        console.log('🔍 DEBUG - Initializing workout logs...');
         await initializeWorkoutLogs(workoutData);
         
         // 4. Reset state for new workout
         if (isMounted) {
           setCompletedMuscleGroups(new Set());
           setMuscleGroupFeedbacks(new Map());
+          console.log('🔍 DEBUG - State reset complete');
         }
       } catch (error) {
-        console.error('Initialization failed:', error);
+        console.error('🔍 DEBUG - Initialization failed:', error);
         if (isMounted) {
           toast({
             title: "Error",
@@ -122,6 +136,7 @@ export function WorkoutLog() {
         if (isMounted) {
           setLoading(false);
           isInitializing = false;
+          console.log('🔍 DEBUG - Initialization complete');
         }
       }
     };
@@ -131,11 +146,13 @@ export function WorkoutLog() {
     return () => { 
       isMounted = false; 
       isInitializing = false;
+      console.log('🔍 DEBUG - Component cleanup');
     };
   }, [user, workoutId]);
 
   const loadWorkout = async () => {
     try {
+      console.log('🔍 DEBUG - Querying default_workouts...');
       // Load workout from either default_workouts or custom_workouts
       let { data: defaultWorkout } = await supabase
         .from('default_workouts')
@@ -144,6 +161,7 @@ export function WorkoutLog() {
         .maybeSingle();
 
       if (!defaultWorkout) {
+        console.log('🔍 DEBUG - No default workout found, trying custom_workouts...');
         const { data: customWorkout } = await supabase
           .from('custom_workouts')
           .select('*')
@@ -153,22 +171,30 @@ export function WorkoutLog() {
         
         if (customWorkout) {
           defaultWorkout = customWorkout;
+          console.log('🔍 DEBUG - Found custom workout:', customWorkout.name);
         }
+      } else {
+        console.log('🔍 DEBUG - Found default workout:', defaultWorkout.name);
       }
 
       if (defaultWorkout) {
         setWorkout(defaultWorkout);
+        console.log('🔍 DEBUG - Workout structure:', defaultWorkout.workout_structure);
+        console.log('🔍 DEBUG - Workout duration:', defaultWorkout.duration_weeks, 'weeks');
         return defaultWorkout;
       }
+      
+      console.log('🔍 DEBUG - No workout found');
       return null;
     } catch (error) {
-      console.error('Error loading workout:', error);
+      console.error('🔍 DEBUG - Error loading workout:', error);
       return null;
     }
   };
 
   const loadActiveWorkoutInfo = async () => {
     try {
+      console.log('🔍 DEBUG - Querying active_workouts...');
       const { data: activeWorkout } = await supabase
         .from('active_workouts')
         .select('current_week, current_day')
@@ -177,27 +203,32 @@ export function WorkoutLog() {
         .maybeSingle();
         
       if (activeWorkout) {
-        console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
+        console.log('🔍 DEBUG - Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
         setCurrentWeek(activeWorkout.current_week);
         setCurrentDay(activeWorkout.current_day);
         return activeWorkout;
+      } else {
+        console.log('🔍 DEBUG - No active workout found - using defaults');
       }
       return null;
     } catch (error) {
-      console.error('Error loading active workout info:', error);
+      console.error('🔍 DEBUG - Error loading active workout info:', error);
       return null;
     }
   };
 
-  // ✅ FIXED: Simplified sequential SC prompting
+  // ✅ FIXED: Simplified sequential SC prompting with debug
   const promptForSoreness = useCallback(async (muscleGroups: string[]): Promise<Record<string, string>> => {
+    console.log('🔍 DEBUG - promptForSoreness called with:', muscleGroups);
     const results: Record<string, string> = {};
     
     for (let i = 0; i < muscleGroups.length; i++) {
       const currentGroup = muscleGroups[i];
-      console.log(`Asking soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
+      console.log(`🔍 DEBUG - Processing soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
       
       const result = await new Promise<string | null>((resolve) => {
+        console.log(`🔍 DEBUG - Setting scModal state for ${currentGroup}`);
+        console.log(`🔍 DEBUG - Modal will be open: true`);
         setScModal({
           isOpen: true,
           muscleGroup: currentGroup,
@@ -206,30 +237,40 @@ export function WorkoutLog() {
         });
       });
       
+      console.log(`🔍 DEBUG - Received result for ${currentGroup}:`, result);
+      
       if (result) {
         results[currentGroup] = result;
       }
       
       // Close modal and add small delay for better UX
+      console.log(`🔍 DEBUG - Closing modal for ${currentGroup}`);
       setScModal(prev => ({ ...prev, isOpen: false }));
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
+    console.log('🔍 DEBUG - Final soreness results:', results);
     return results;
   }, []);
 
   const initializeWorkoutLogs = async (workoutData: any) => {
     const structure = workoutData.workout_structure as WorkoutStructure;
-    console.log('Workout structure:', structure);
+    console.log('🔍 DEBUG - Workout structure:', structure);
+    console.log('🔍 DEBUG - Current week at start:', currentWeek);
+    console.log('🔍 DEBUG - Current day at start:', currentDay);
     
     const dayKey = `day${currentDay}`;
     const dayWorkout = structure[dayKey] || [];
     
-    console.log('Day key:', dayKey, 'Day workout:', dayWorkout);
+    console.log('🔍 DEBUG - Day key:', dayKey);
+    console.log('🔍 DEBUG - Day workout:', dayWorkout);
+    console.log('🔍 DEBUG - Day workout length:', dayWorkout.length);
     
     // Create base logs from template
     const baseLogs: WorkoutLog[] = [];
     for (const mg of dayWorkout) {
+      console.log('🔍 DEBUG - Processing muscle group:', mg.muscleGroup);
+      console.log('🔍 DEBUG - Exercises in group:', mg.exercises);
       for (const ex of mg.exercises) {
         const defaultSets = ex.sets || 2;
         baseLogs.push({
@@ -243,21 +284,27 @@ export function WorkoutLog() {
           completed: false,
           currentSets: defaultSets,
         });
+        console.log(`🔍 DEBUG - Added exercise: ${ex.name} to ${mg.muscleGroup}`);
       }
     }
 
+    console.log('🔍 DEBUG - Total baseLogs created:', baseLogs.length);
+
     try {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
-      console.log('Muscle groups for today:', muscleGroups);
+      console.log('🔍 DEBUG - Unique muscle groups for today:', muscleGroups);
+      console.log('🔍 DEBUG - Current week before SC check:', currentWeek);
       
       // ✅ FIXED: Sequential SC prompting for multiple muscle groups
       const scGroupsToAsk: string[] = [];
       
       for (const mg of muscleGroups) {
         let shouldAsk = currentWeek >= 2;
+        console.log(`🔍 DEBUG - ${mg}: currentWeek (${currentWeek}) >= 2? ${shouldAsk}`);
         
         if (!shouldAsk && currentWeek === 1) {
           // Check if this muscle group was trained earlier in the same week
+          console.log(`🔍 DEBUG - Checking previous sessions for ${mg} in week ${currentWeek}, day < ${currentDay}`);
           const { data: sameWeek } = await supabase
             .from('mesocycle')
             .select('id, day_number')
@@ -266,22 +313,39 @@ export function WorkoutLog() {
             .eq('week_number', currentWeek)
             .eq('muscle_group', mg)
             .lt('day_number', currentDay);
+          
+          console.log(`🔍 DEBUG - Found ${(sameWeek || []).length} previous sessions for ${mg}:`, sameWeek);
           shouldAsk = (sameWeek || []).length > 0;
         }
         
         if (shouldAsk) {
           scGroupsToAsk.push(mg);
+          console.log(`🔍 DEBUG - ✅ ADDED ${mg} to soreness check list`);
+        } else {
+          console.log(`🔍 DEBUG - ❌ SKIPPED ${mg} - shouldAsk = false`);
         }
         
-        console.log(`${mg}: shouldAsk=${shouldAsk} (week=${currentWeek})`);
+        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${currentWeek})`);
       }
 
-      // Ask for soreness sequentially if needed
-      const scResults = await promptForSoreness(scGroupsToAsk);
-      console.log('SC Results:', scResults);
+      console.log('🔍 DEBUG - Final scGroupsToAsk array:', scGroupsToAsk);
+      console.log('🔍 DEBUG - scGroupsToAsk.length:', scGroupsToAsk.length);
+
+      let scResults: Record<string, string> = {};
+
+      if (scGroupsToAsk.length > 0) {
+        console.log('🔍 DEBUG - ✅ CALLING promptForSoreness with groups:', scGroupsToAsk);
+        
+        // Ask for soreness sequentially if needed
+        scResults = await promptForSoreness(scGroupsToAsk);
+        console.log('🔍 DEBUG - ✅ SC Results received:', scResults);
+      } else {
+        console.log('🔍 DEBUG - ❌ NO GROUPS TO ASK - scGroupsToAsk is empty');
+      }
 
       // Save SC results to database
       for (const [mg, sc] of Object.entries(scResults)) {
+        console.log(`🔍 DEBUG - Saving soreness result: ${mg} = ${sc}`);
         await supabase.from('muscle_soreness').insert({
           user_id: user.id,
           workout_date: new Date().toISOString().split('T')[0],
@@ -295,6 +359,8 @@ export function WorkoutLog() {
       const prevWeek = currentWeek - 1;
       let prevRows: any[] = [];
       
+      console.log(`🔍 DEBUG - Looking for previous week data (week ${prevWeek})`);
+      
       if (prevWeek >= 1 && user) {
         try {
           const { data: rows, error } = await supabase
@@ -307,18 +373,21 @@ export function WorkoutLog() {
             
           if (error) throw error;
           prevRows = rows || [];
-          console.log(`Loaded ${prevRows.length} previous week records`);
+          console.log(`🔍 DEBUG - Loaded ${prevRows.length} previous week records`);
+          console.log('🔍 DEBUG - Previous week data:', prevRows);
         } catch (error) {
-          console.error('Failed to load previous week data:', error);
+          console.error('🔍 DEBUG - Failed to load previous week data:', error);
           prevRows = [];
         }
+      } else {
+        console.log(`🔍 DEBUG - Skipping previous week data (prevWeek=${prevWeek}, user=${!!user})`);
       }
 
       // ✅ FIXED: Corrected mapPump function with proper comparison operators
       const mapPump = (p?: string) => {
         if (!p) return 'medium';
-        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';  // FIXED: === instead of =
-        if (p === 'moderate' || p === 'medium') return 'medium';               // FIXED: === instead of =
+        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';
+        if (p === 'moderate' || p === 'medium') return 'medium';
         return 'amazing';
       };
 
@@ -326,14 +395,16 @@ export function WorkoutLog() {
       for (const mg of muscleGroups) {
         // Get most recent pump level for this muscle group (across all exercises)
         const mgRows = prevRows.filter(r => r.muscle_group === mg && r.pump_level);
+        console.log(`🔍 DEBUG - Found ${mgRows.length} pump records for ${mg}`);
         if (mgRows.length > 0) {
           // Sort by day_number descending and take the first (most recent)
           const recent = mgRows.sort((a, b) => (b.day_number || 0) - (a.day_number || 0))[0];
           pumpByGroup[mg] = mapPump(recent.pump_level);
+          console.log(`🔍 DEBUG - ${mg} previous pump: ${recent.pump_level} → mapped to: ${pumpByGroup[mg]}`);
         } else {
           pumpByGroup[mg] = 'medium';
+          console.log(`🔍 DEBUG - ${mg} no previous pump data → defaulted to: medium`);
         }
-        console.log(`${mg} pump level: ${pumpByGroup[mg]}`);
       }
 
       // ✅ FIXED: Sets adjustment function with proper comparison operators
@@ -342,14 +413,14 @@ export function WorkoutLog() {
         pump: 'none'|'medium'|'amazing'
       ) => {
         if (!sc) return 0;
-        if (sc === 'extremely_sore') return -1;                    // FIXED: === instead of =
-        if (sc === 'none' && pump === 'none') return 3;           // FIXED: === instead of =
-        if (sc === 'none' && pump === 'medium') return 2;         // FIXED: === instead of =
-        if (sc === 'none' && pump === 'amazing') return 1;        // FIXED: === instead of =
-        if (sc === 'medium' && pump === 'none') return 1;         // FIXED: === instead of =
-        if (sc === 'medium' && pump === 'medium') return 1;       // FIXED: === instead of =
-        if (sc === 'medium' && pump === 'amazing') return 1;      // FIXED: === instead of =
-        if (sc === 'very_sore') return 0;                         // FIXED: === instead of =
+        if (sc === 'extremely_sore') return -1;
+        if (sc === 'none' && pump === 'none') return 3;
+        if (sc === 'none' && pump === 'medium') return 2;
+        if (sc === 'none' && pump === 'amazing') return 1;
+        if (sc === 'medium' && pump === 'none') return 1;
+        if (sc === 'medium' && pump === 'medium') return 1;
+        if (sc === 'medium' && pump === 'amazing') return 1;
+        if (sc === 'very_sore') return 0;
         return 0;
       };
 
@@ -360,19 +431,27 @@ export function WorkoutLog() {
         .forEach(r => { 
           if (!prevByExercise.has(r.exercise_name)) {
             prevByExercise.set(r.exercise_name, r); 
+            console.log(`🔍 DEBUG - Mapped previous data for exercise: ${r.exercise_name}`);
           }
         });
+
+      console.log(`🔍 DEBUG - Previous exercise data mapped for ${prevByExercise.size} exercises`);
 
       // Apply progression logic to each exercise
       const updatedLogs = baseLogs.map(log => {
         const prev = prevByExercise.get(log.exercise);
         let newLog = { ...log };
         
+        console.log(`🔍 DEBUG - Processing ${log.exercise} (${log.muscleGroup})`);
+        console.log(`🔍 DEBUG - Has previous data: ${!!prev}`);
+        
         // ✅ FIXED: Deload logic (final week - reduce to 1/3 except if 1)
         const isDeloadWeek = currentWeek === workoutData.duration_weeks;
+        console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${currentWeek}/${workoutData.duration_weeks})`);
         
         if (prev) {
           let baseSets = prev.actual_sets || log.currentSets;
+          console.log(`🔍 DEBUG - Base sets from previous: ${baseSets}`);
           
           if (isDeloadWeek) {
             // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
@@ -384,7 +463,7 @@ export function WorkoutLog() {
             const deloadReps = Math.max(1, Math.round(prevReps * (1/3)));
             newLog.plannedReps = deloadReps;
             
-            console.log(`DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
+            console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
           } else if (currentWeek >= 2) {
             // Normal progression using SC + MPC
             const sc = scResults[log.muscleGroup] as any;
@@ -395,13 +474,16 @@ export function WorkoutLog() {
             newLog.plannedSets = targetSets;
             newLog.currentSets = targetSets;
             
-            console.log(`${log.exercise}: ${baseSets} + ${setsAdd} = ${targetSets} sets (SC:${sc}, MPC:${pump})`);
+            console.log(`🔍 DEBUG - PROGRESSION: ${log.exercise}: ${baseSets} + ${setsAdd} = ${targetSets} sets (SC:${sc}, MPC:${pump})`);
+          } else {
+            console.log(`🔍 DEBUG - Week 1, no progression applied for ${log.exercise}`);
           }
 
           // Prefill weights from last week
           newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => 
             prev.weight_used?.[i] ?? prev.weight_used?.[0] ?? 0
           );
+          console.log(`🔍 DEBUG - Prefilled weights for ${log.exercise}:`, newLog.weights);
 
           // Prefill reps based on RPE rule
           const prevReps: number[] = prev.actual_reps || [];
@@ -411,6 +493,7 @@ export function WorkoutLog() {
             const firstRpe = prevRpe[0] || 9;
             const repIncrease = firstRpe <= 8 ? 1 : 0;
             newLog.plannedReps = prevReps[0] + repIncrease;
+            console.log(`🔍 DEBUG - Rep progression: ${prevReps[0]} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
           }
 
           // Resize arrays to match current sets
@@ -418,6 +501,7 @@ export function WorkoutLog() {
           newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
           
         } else {
+          console.log(`🔍 DEBUG - No previous data for ${log.exercise}`);
           // No previous data - handle deload and new exercises
           if (isDeloadWeek) {
             // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
@@ -427,7 +511,7 @@ export function WorkoutLog() {
             newLog.currentSets = deloadSets;
             newLog.plannedReps = deloadReps;
             
-            console.log(`DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
+            console.log(`🔍 DEBUG - DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
           } else if (currentWeek >= 2) {
             // Apply SC + MPC even without previous data
             const sc = scResults[log.muscleGroup] as any;
@@ -438,7 +522,7 @@ export function WorkoutLog() {
             newLog.plannedSets = targetSets;
             newLog.currentSets = targetSets;
             
-            console.log(`${log.exercise} (no prev): ${newLog.currentSets} + ${setsAdd} = ${targetSets} sets`);
+            console.log(`🔍 DEBUG - PROGRESSION (no prev): ${log.exercise}: ${newLog.currentSets} + ${setsAdd} = ${targetSets} sets`);
           }
           
           // Initialize arrays
@@ -447,14 +531,15 @@ export function WorkoutLog() {
           newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
         }
         
+        console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, ${newLog.plannedReps} reps`);
         return newLog;
       });
 
-      console.log('Final initialized logs:', updatedLogs);
+      console.log('🔍 DEBUG - Final initialized logs:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
-      console.error('Prefill initialization failed:', e);
+      console.error('🔍 DEBUG - Prefill initialization failed:', e);
       setWorkoutLogs(baseLogs);
     }
   };
@@ -987,6 +1072,7 @@ export function WorkoutLog() {
             </DialogHeader>
             <div className="space-y-4">
               <RadioGroup onValueChange={(value) => {
+                console.log(`🔍 DEBUG - User selected soreness: ${value} for ${scModal.muscleGroup}`);
                 scModal.resolve(value);
               }}>
                 <div className="flex items-center space-x-2">
