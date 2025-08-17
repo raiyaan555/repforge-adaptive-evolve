@@ -1,330 +1,659 @@
-/* ──────────────────────────────────────────────────────────────────────────
-   WorkoutLog.tsx ─ REWRITE (MPC + SC LOGIC FULLY IMPLEMENTED)
-   ────────────────────────────────────────────────────────────────────────── */
-
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Minus, ChevronLeft } from 'lucide-react';
-
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { ChevronLeft, Plus, Minus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
-/* ──────────────────  TYPES  ────────────────── */
-type PumpLevel = 'none' | 'medium' | 'amazing';
-type Soreness = 'none' | 'medium' | 'very_sore' | 'extremely_sore';
-
-interface Exercise { name: string; sets: number; reps: number }
-interface DayStructure { muscleGroup: string; exercises: Exercise[] }
-type WorkoutStructure = Record<`day${number}`, DayStructure[]>;
-interface WorkoutLogRow {
-  exercise: string; muscleGroup: string;
-  plannedSets: number; plannedReps: number;
-  actualReps: number[]; weights: number[]; rpe: number[];
-  currentSets: number; completed: boolean;
+interface Exercise {
+  name: string;
+  sets: number;
+  reps: number;
+  restTime?: string;
 }
-interface MPCFeedback { pumpLevel: PumpLevel }
-interface PromptState { isOpen: boolean; muscleGroup: string; rows: WorkoutLogRow[] }
 
-/* ──────────────────  MPC / SC ADJUSTMENT TABLE  ────────────────── */
-const setAdjustment = (sc: Soreness, mpc: PumpLevel): number => {
-  if (sc === 'extremely_sore') return -1;
+interface WorkoutStructure {
+  [day: string]: {
+    muscleGroup: string;
+    exercises: Exercise[];
+  }[];
+}
 
-  const table: Record<Soreness, Record<PumpLevel, number>> = {
-    none: { none: 3, medium: 2, amazing: 1 },
-    medium: { none: 1, medium: 1, amazing: 1 },
-    very_sore: { none: 0, medium: 0, amazing: 0 },
-    extremely_sore: { none: -1, medium: -1, amazing: -1 }
-  };
-  return table[sc][mpc];
-};
+interface WorkoutLog {
+  exercise: string;
+  muscleGroup: string;
+  plannedSets: number;
+  plannedReps: number;
+  actualReps: number[];
+  weights: number[];
+  rpe: number[]; // Changed to array for per-set RPE and made mandatory
+  completed: boolean;
+  currentSets: number;
+}
 
-/* ─────────────────────────────────────────────────────────────────── */
+interface MuscleGroupFeedback {
+  pumpLevel: 'none' | 'medium' | 'amazing';
+  isSore: boolean;
+  canAddSets: boolean;
+}
+
 export function WorkoutLog() {
-  const { workoutId = '' } = useParams();
-  const nav = useNavigate();
+  const { workoutId } = useParams<{ workoutId: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-
-  /* ──────────── reactive state ──────────── */
+  
   const [workout, setWorkout] = useState<any>(null);
-  const [rows, setRows] = useState<WorkoutLogRow[]>([]);
-  const [week, setWeek] = useState(1);
-  const [day, setDay] = useState(1);
+  const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
+  const [currentWeek, setCurrentWeek] = useState(1);
+  const [currentDay, setCurrentDay] = useState(1);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    isOpen: boolean;
+    muscleGroup: string;
+    exercises: WorkoutLog[];
+  }>({ isOpen: false, muscleGroup: '', exercises: [] });
+  const [feedback, setFeedback] = useState<MuscleGroupFeedback>({
+    pumpLevel: 'medium',
+    isSore: false,
+    canAddSets: false
+  });
+  const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
+  const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
   const [loading, setLoading] = useState(true);
 
-  const [prompt, setPrompt] = useState<PromptState>({ isOpen: false, muscleGroup: '', rows: [] });
-  const [feedback, setFeedback] = useState<MPCFeedback>({ pumpLevel: 'medium' });
+  // Add loading state for processing feedback
+  const [isProcessingFeedback, setIsProcessingFeedback] = useState(false);
 
-  /* ──────────── ONE EFFECT TO RULE THEM ALL ──────────── */
-  useEffect(() => { (async () => {
-    if (!user || !workoutId) return;
-    setLoading(true);
-
-    /* 1️⃣  fetch workout (default or custom) */
-    const workoutRes =
-      (await supabase.from('default_workouts').select('*').eq('id', workoutId).maybeSingle()).data ??
-      (await supabase.from('custom_workouts').select('*').eq('id', workoutId).eq('user_id', user.id).maybeSingle()).data;
-
-    if (!workoutRes) return toast({ title: 'Error', description: 'Workout not found', variant: 'destructive' });
-
-    setWorkout(workoutRes);
-
-    /* 2️⃣  fetch active week / day */
-    const active = (await supabase
-      .from('active_workouts')
-      .select('current_week,current_day')
-      .eq('user_id', user.id)
-      .eq('workout_id', workoutId)
-      .maybeSingle()).data ?? { current_week: 1, current_day: 1 };
-
-    setWeek(active.current_week); setDay(active.current_day);
-
-    /* 3️⃣  initialize log rows with pre-fill */
-    const struct: WorkoutStructure = workoutRes.workout_structure as unknown as WorkoutStructure;
-    const dayKey = `day${active.current_day}` as keyof WorkoutStructure;
-    const templateRows: WorkoutLogRow[] = [];
-
-    (struct[dayKey] ?? []).forEach(block => block.exercises.forEach(ex => {
-      const baseSets = ex.sets || 2;
-      templateRows.push({
-        exercise: ex.name, muscleGroup: block.muscleGroup,
-        plannedSets: baseSets, currentSets: baseSets,
-        plannedReps: ex.reps || 8,
-        actualReps: Array(baseSets).fill(0),
-        weights: Array(baseSets).fill(0),
-        rpe: Array(baseSets).fill(7),
-        completed: false
-      });
-    }));
-
-    /* ----------  PREFILL (Week ≥2, Deload, SC prompt) ---------- */
-    const uniqueMG = [...new Set(templateRows.map(r => r.muscleGroup))];
-
-    /* ▸ Ask SC where needed (always week≥2, or repeat group in week1) */
-    const sorenessByMG: Record<string, Soreness> = {} as any;
-    if (week >= 2) {
-      for (const mg of uniqueMG) sorenessByMG[mg] = await askSoreness(mg);
-    } else {                                   // week 1 repeat prompt
-      for (const mg of uniqueMG) {
-        const { count } = await supabase
-          .from('mesocycle')
-          .select('id', { head: true, count: 'exact' })
-          .eq('user_id', user.id)
-          .eq('plan_id', workoutId)
-          .eq('week_number', 1)
-          .eq('muscle_group', mg);
-        if (count && count > 0) sorenessByMG[mg] = await askSoreness(mg);
+  // Single useEffect to handle all data loading sequentially
+  useEffect(() => {
+    let isMounted = true;
+    
+    const initializeAllData = async () => {
+      if (!user || !workoutId) return;
+      
+      setLoading(true);
+      
+      try {
+        // 1. Load workout data first
+        const workoutData = await loadWorkout();
+        if (!isMounted || !workoutData) return;
+        
+        // 2. Load active workout info (week/day)
+        const activeInfo = await loadActiveWorkoutInfo();
+        if (!isMounted) return;
+        
+        // 3. Initialize logs with proper data
+        await initializeWorkoutLogs(workoutData);
+        
+        // 4. Reset state for new day
+        if (isMounted) {
+          setCompletedMuscleGroups(new Set());
+          setMuscleGroupFeedbacks(new Map());
+        }
+      } catch (error) {
+        console.error('Error initializing workout data:', error);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-    }
+    };
+    
+    initializeAllData();
+    
+    return () => { isMounted = false; };
+  }, [user, workoutId]);
 
-    /* ▸ Fetch previous-week rows to drive prefills */
-    const prevRows = week > 1
-      ? (await supabase
-        .from('mesocycle')
-        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level')
+  const loadActiveWorkoutInfo = async () => {
+    try {
+      const { data: activeWorkout } = await supabase
+        .from('active_workouts')
+        .select('current_week, current_day')
         .eq('user_id', user.id)
-        .eq('plan_id', workoutId)
-        .eq('week_number', week - 1)).data ?? []
-      : [];
-
-    /* ▸ Build pump lookup from prev rows */
-    const pumpByMG: Record<string, PumpLevel> = {};
-    for (const mg of uniqueMG) {
-      const vals = prevRows.filter(r => r.muscle_group === mg).map(r => r.pump_level ?? 'medium');
-      if (!vals.length) { pumpByMG[mg] = 'medium'; continue; }
-      const mode = vals.sort((a, b) =>
-        vals.filter(v => v === a).length - vals.filter(v => v === b).length).pop() as string;
-      pumpByMG[mg] = (mode === 'none' || mode === 'negligible' || mode === 'low') ? 'none'
-        : mode === 'moderate' ? 'medium' : mode as PumpLevel;
+        .eq('workout_id', workoutId)
+        .maybeSingle();
+        
+      if (activeWorkout) {
+        console.log('Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
+        setCurrentWeek(activeWorkout.current_week);
+        setCurrentDay(activeWorkout.current_day);
+        return activeWorkout; // Return the data
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading active workout info:', error);
+      return null;
     }
-
-    /* ▸ Apply pre-fill logic to templateRows */
-    const finalRows = templateRows.map(r => {
-      const prev = prevRows.find(p => p.exercise_name === r.exercise);
-      const pump = pumpByMG[r.muscleGroup];
-      const sc = sorenessByMG[r.muscleGroup];
-
-      /* sets */
-      let newSets = r.currentSets;
-      if (week === workoutRes.duration_weeks) {          // deload last week
-        newSets = Math.max(1, Math.round(newSets * 0.67));
-      } else if (week >= 2 && sc) {                      // week ≥2 adaptive
-        newSets = Math.max(1, newSets + setAdjustment(sc, pump));
-      }
-      /* reps */
-      let newReps = r.plannedReps;
-      if (prev && week >= 2) {
-        const prevRPE = prev.rpe?.[0] ?? 9;
-        if (prevRPE <= 8) newReps = (prev.actual_reps?.[0] ?? newReps) + 1;
-      }
-      /* weight */
-      const lastWeight = prev?.weight_used?.[0] ?? 0;
-
-      return {
-        ...r,
-        plannedSets: newSets, currentSets: newSets,
-        plannedReps: newReps,
-        weights: Array(newSets).fill(lastWeight),
-        actualReps: Array(newSets).fill(0),
-        rpe: Array(newSets).fill(7)
-      };
-    });
-
-    setRows(finalRows);
-    setLoading(false);
-  })(); }, [user, workoutId]);
-
-  /* ──────────── UI HELPERS  ──────────── */
-  const mgList = [...new Set(rows.map(r => r.muscleGroup))];
-  const mgRows = (mg: string) => rows.filter(r => r.muscleGroup === mg);
-  const rowOK = (r: WorkoutLogRow) => r.weights.every(w => w > 0) && r.actualReps.every(x => x > 0) &&
-    (week > 1 || r.rpe.every(x => x >= 1 && x <= 10));
-  const doneMg = (mg: string) => mgRows(mg).every(rowOK);
-
-  /* ──────────── Soreness Prompt (modal-less)  ──────────── */
-  async function askSoreness(mg: string): Promise<Soreness> {
-    return new Promise<Soreness>(resolve => {
-      const levels: [Soreness, string][] = [
-        ['none', 'None / Negligible'], ['medium', 'Medium'],
-        ['very_sore', 'Very Sore'], ['extremely_sore', 'Extremely Sore']
-      ];
-      const choice = window.prompt(
-        `Soreness before training ${mg}:\n` +
-        levels.map((l, i) => `${i + 1}. ${l[1]}`).join('\n')
-      );
-      resolve(levels[Number(choice) - 1]?.[0] ?? 'medium');
-    });
-  }
-
-  /* ──────────── MPC Prompt (uses Dialog) ──────────── */
-  const openMPC = (mg: string) =>
-    setPrompt({ isOpen: true, muscleGroup: mg, rows: mgRows(mg) });
-
-  const saveMPC = async () => {
-    const { muscleGroup, rows: mgRows } = prompt;
-    await supabase.from('pump_feedback').insert({
-      user_id: user.id, workout_date: new Date().toISOString().slice(0, 10),
-      muscle_group: muscleGroup, pump_level: feedback.pumpLevel
-    });
-    // save mesocycle rows …
-    for (const r of mgRows) await supabase.from('mesocycle').insert({
-      user_id: user.id, plan_id: workoutId, workout_name: workout.name,
-      week_number: week, day_number: day,
-      exercise_name: r.exercise, muscle_group: r.muscleGroup,
-      planned_sets: r.plannedSets, actual_sets: r.actualReps.length,
-      planned_reps: r.plannedReps, actual_reps: r.actualReps,
-      weight_used: r.weights, weight_unit: 'kg', rpe: r.rpe,
-      pump_level: feedback.pumpLevel
-    });
-    setPrompt({ isOpen: false, muscleGroup: '', rows: [] });
-    toast({ title: 'Saved', description: `Feedback saved for ${muscleGroup}` });
   };
 
-  /* ──────────── RENDER ──────────── */
-  if (loading) return <div className='p-6'>Loading…</div>;
+  const loadWorkout = async () => {
+    try {
+      // Load workout from either default_workouts or custom_workouts
+      let { data: defaultWorkout } = await supabase
+        .from('default_workouts')
+        .select('*')
+        .eq('id', workoutId)
+        .maybeSingle();
 
-  return (
-    <div className='p-4 space-y-6 max-w-5xl mx-auto'>
-      <div className='flex items-center gap-3'>
-        <Button size='sm' variant='outline' onClick={() => nav('/workouts')}>
-          <ChevronLeft className='w-4 h-4' />Back
-        </Button>
-        <h1 className='text-xl font-bold'>Day {day} • {workout.name} (Week {week})</h1>
-      </div>
-
-      {mgList.map(mg => (
-        <Card key={mg}>
-          <CardHeader className='flex justify-between items-center'>
-            <CardTitle>{mg}</CardTitle>
-            <Button size='sm' onClick={() => openMPC(mg)} disabled={!doneMg(mg)}>
-              {doneMg(mg) ? 'Complete Group' : 'Fill Data First'}
-            </Button>
-          </CardHeader>
-          <CardContent className='space-y-4'>
-            {mgRows(mg).map((row, i) => (
-              <ExerciseRow key={i} row={row} idx={rows.indexOf(row)} />
-            ))}
-          </CardContent>
-        </Card>
-      ))}
-
-      {/* ──────── MPC Dialog ──────── */}
-      <Dialog open={prompt.isOpen} onOpenChange={() => setPrompt(s => ({ ...s, isOpen: false }))}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>MPC for {prompt.muscleGroup}</DialogTitle></DialogHeader>
-          <RadioGroup value={feedback.pumpLevel} onValueChange={v => setFeedback({ pumpLevel: v as PumpLevel })}>
-            {(['none', 'medium', 'amazing'] as PumpLevel[]).map(l => (
-              <div key={l} className='flex items-center gap-2'>
-                <RadioGroupItem value={l} id={`pump-${l}`} />
-                <Label htmlFor={`pump-${l}`}>{l === 'none' ? 'None / Negligible' : l === 'medium' ? 'Medium' : 'Amazing'}</Label>
-              </div>
-            ))}
-          </RadioGroup>
-          <Button className='w-full mt-4' onClick={saveMPC}>Save Feedback</Button>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-
-  /* ──────────── INNER EXERCISE COMPONENT ──────────── */
-  function ExerciseRow({ row, idx }: { row: WorkoutLogRow, idx: number }) {
-    const update = (set: number, field: 'weight' | 'reps' | 'rpe', val: number) => {
-      setRows(rs => {
-        const copy = [...rs]; const r = { ...copy[idx] };
-        const arr = field === 'weight' ? r.weights : field === 'reps' ? r.actualReps : r.rpe;
-        arr[set] = val; r.completed = rowOK(r); copy[idx] = r; return copy;
-      });
-    };
-    const addSet = () => setRows(rs => {
-      const copy = [...rs]; const r = { ...copy[idx] };
-      r.currentSets++; r.plannedSets++; r.actualReps.push(0); r.weights.push(0); r.rpe.push(7);
-      copy[idx] = r; return copy;
-    });
-    const removeSet = () => setRows(rs => {
-      const copy = [...rs]; const r = { ...copy[idx] };
-      if (r.currentSets > 1) {
-        r.currentSets--; r.plannedSets--;
-        r.actualReps.pop(); r.weights.pop(); r.rpe.pop();
+      if (!defaultWorkout) {
+        const { data: customWorkout } = await supabase
+          .from('custom_workouts')
+          .select('*')
+          .eq('id', workoutId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        if (customWorkout) {
+          defaultWorkout = customWorkout;
+        }
       }
-      copy[idx] = r; return copy;
+
+      if (defaultWorkout) {
+        setWorkout(defaultWorkout);
+        return defaultWorkout; // Return the data
+      }
+      return null;
+    } catch (error) {
+      console.error('Error loading workout:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load workout details",
+        variant: "destructive"
+      });
+      return null;
+    }
+  };
+
+  const initializeWorkoutLogs = async (workoutData: any) => {
+    // Null safety check
+    if (!workoutData || !workoutData.workout_structure) {
+      console.error('Workout data is null or missing structure:', workoutData);
+      return;
+    }
+    
+    const structure = workoutData.workout_structure as WorkoutStructure;
+    console.log('Workout structure:', structure);
+    
+    const dayKey = `day${currentDay}`;
+    const dayWorkout = structure[dayKey] || [];
+    
+    console.log('Day key:', dayKey);
+    console.log('Day workout:', dayWorkout);
+    
+    // Base logs from template
+    const baseLogs: WorkoutLog[] = [];
+    for (const mg of dayWorkout) {
+      for (const ex of mg.exercises) {
+        const defaultSets = ex.sets || 2;
+        baseLogs.push({
+          exercise: ex.name,
+          muscleGroup: mg.muscleGroup,
+          plannedSets: ex.sets || defaultSets,
+          plannedReps: ex.reps || 0,
+          actualReps: Array(defaultSets).fill(0),
+          weights: Array(defaultSets).fill(0),
+          rpe: Array(defaultSets).fill(7),
+          completed: false,
+          currentSets: defaultSets,
+        });
+      }
+    }
+
+    console.log('Initialized logs:', baseLogs);
+    setWorkoutLogs(baseLogs);
+  };
+
+  const updateWorkoutLog = (index: number, field: keyof WorkoutLog, value: any) => {
+    const updatedLogs = [...workoutLogs];
+    updatedLogs[index] = { ...updatedLogs[index], [field]: value };
+    setWorkoutLogs(updatedLogs);
+  };
+
+  const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
+    const updatedLogs = [...workoutLogs];
+    const exercise = updatedLogs[exerciseIndex];
+    
+    // Validation
+    if (!exercise || setIndex < 0 || setIndex >= exercise.currentSets) return;
+    
+    // CRITICAL FIX: Ensure all arrays match currentSets length
+    while (exercise.actualReps.length < exercise.currentSets) {
+      exercise.actualReps.push(0);
+    }
+    while (exercise.weights.length < exercise.currentSets) {
+      exercise.weights.push(0);
+    }
+    while (exercise.rpe.length < exercise.currentSets) {
+      exercise.rpe.push(7);
+    }
+    
+    // Truncate if too long
+    exercise.actualReps = exercise.actualReps.slice(0, exercise.currentSets);
+    exercise.weights = exercise.weights.slice(0, exercise.currentSets);
+    exercise.rpe = exercise.rpe.slice(0, exercise.currentSets);
+    
+    // Validate value
+    let safeValue = value;
+    if (field === 'rpe') {
+      if (value < 1 || value > 10 || isNaN(value)) {
+        toast({
+          title: "Invalid RPE",
+          description: "RPE must be between 1 and 10",
+          variant: "destructive"
+        });
+        return;
+      }
+    } else if (isNaN(value) || value < 0) {
+      safeValue = 0;
+    }
+    
+    // Update the field
+    if (field === 'reps') exercise.actualReps[setIndex] = safeValue;
+    else if (field === 'weight') exercise.weights[setIndex] = safeValue;
+    else if (field === 'rpe') exercise.rpe[setIndex] = safeValue;
+    
+    // Update completion status
+    exercise.completed = isExerciseCompleted(exercise);
+    
+    setWorkoutLogs(updatedLogs);
+  };
+
+  const addSet = (exerciseIndex: number) => {
+    const updatedLogs = [...workoutLogs];
+    const exercise = updatedLogs[exerciseIndex];
+    
+    exercise.currentSets++;
+    exercise.actualReps.push(0);
+    exercise.weights.push(0);
+    exercise.rpe.push(7);
+    
+    // Reset completion status since we added a set
+    exercise.completed = false;
+    
+    setWorkoutLogs(updatedLogs);
+  };
+
+  const removeSet = (exerciseIndex: number) => {
+    const updatedLogs = [...workoutLogs];
+    const exercise = updatedLogs[exerciseIndex];
+    
+    // Minimum 1 set requirement
+    if (exercise.currentSets <= 1) return;
+    
+    exercise.currentSets--;
+    exercise.actualReps.pop();
+    exercise.weights.pop();
+    exercise.rpe.pop();
+    
+    // Reset completion status
+    exercise.completed = false;
+    
+    setWorkoutLogs(updatedLogs);
+  };
+  
+  // Check if exercise is completed (all sets have valid data including mandatory RPE)
+  const isExerciseCompleted = (exercise: WorkoutLog) => {
+    const setsToCheck = exercise.currentSets;
+    const requireRpe = currentWeek === 1; // RPE required only in week 1
+    for (let i = 0; i < setsToCheck; i++) {
+      if (!exercise.actualReps[i] || exercise.actualReps[i] === 0 ||
+          !exercise.weights[i] || exercise.weights[i] === 0) {
+        return false;
+      }
+      if (requireRpe && (!exercise.rpe[i] || exercise.rpe[i] < 1 || exercise.rpe[i] > 10)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const getUniqueMuscleGroups = () => {
+    return Array.from(new Set(workoutLogs.map(log => log.muscleGroup)));
+  };
+
+  const getExercisesForMuscleGroup = (muscleGroup: string) => {
+    return workoutLogs.filter(log => log.muscleGroup === muscleGroup);
+  };
+
+  const isMuscleGroupComplete = (muscleGroup: string) => {
+    const exercises = getExercisesForMuscleGroup(muscleGroup);
+    return exercises.length > 0 && exercises.every(exercise => isExerciseCompleted(exercise));
+  };
+
+  const openFeedbackModal = (muscleGroup: string) => {
+    const exercises = getExercisesForMuscleGroup(muscleGroup);
+    setFeedbackModal({
+      isOpen: true,
+      muscleGroup,
+      exercises
     });
+    
+    // Reset feedback to defaults
+    setFeedback({
+      pumpLevel: 'medium',
+      isSore: false,
+      canAddSets: false
+    });
+  };
 
+  const saveFeedback = async () => {
+    if (!user || !feedbackModal.muscleGroup) return;
+    
+    setIsProcessingFeedback(true);
+    
+    try {
+      const currentDate = new Date().toISOString().split('T')[0];
+      
+      // Save pump feedback
+      await supabase.from('pump_feedback').insert({
+        user_id: user.id,
+        workout_date: currentDate,
+        muscle_group: feedbackModal.muscleGroup,
+        pump_level: feedback.pumpLevel
+      });
+
+      // Save muscle soreness if applicable
+      if (feedback.isSore) {
+        await supabase.from('muscle_soreness').insert({
+          user_id: user.id,
+          workout_date: currentDate,
+          muscle_group: feedbackModal.muscleGroup,
+          soreness_level: 'medium', // Default soreness level
+          healed: false
+        });
+      }
+
+      // Save mesocycle data for each exercise
+      for (const exercise of feedbackModal.exercises) {
+        await supabase.from('mesocycle').insert({
+          user_id: user.id,
+          plan_id: workoutId,
+          week_number: currentWeek,
+          day_number: currentDay,
+          workout_name: workout?.name || 'Unknown Workout',
+          exercise_name: exercise.exercise,
+          muscle_group: exercise.muscleGroup,
+          planned_sets: exercise.plannedSets,
+          planned_reps: exercise.plannedReps,
+          actual_sets: exercise.currentSets,
+          actual_reps: exercise.actualReps,
+          weight_used: exercise.weights,
+          weight_unit: weightUnit,
+          rpe: exercise.rpe,
+          pump_level: feedback.pumpLevel,
+          is_sore: feedback.isSore,
+          can_add_sets: feedback.canAddSets,
+          feedback_given: true
+        });
+      }
+
+      // Update completion status
+      setCompletedMuscleGroups(prev => new Set([...prev, feedbackModal.muscleGroup]));
+      setMuscleGroupFeedbacks(prev => new Map([...prev, [feedbackModal.muscleGroup, feedback]]));
+
+      // Close modal
+      setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
+      
+      toast({
+        title: "Feedback Saved",
+        description: `Feedback for ${feedbackModal.muscleGroup} has been saved successfully.`
+      });
+
+    } catch (error) {
+      console.error('Error saving feedback:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save feedback. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessingFeedback(false);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className='border rounded p-3 space-y-2'>
-        <div className='flex justify-between items-center'>
-          <span className='font-semibold'>{row.exercise}</span>
-          <span className='text-sm text-muted-foreground'>Sets: {row.currentSets}</span>
-        </div>
-
-        {row.weights.map((_, sIndex) => (
-          <div key={sIndex} className='grid grid-cols-3 gap-2'>
-            <Input placeholder='Wt' type='number'
-              value={row.weights[sIndex] || ''}
-              onChange={e => update(sIndex, 'weight', Number(e.target.value) || 0)} />
-            <Input placeholder='Reps' type='number'
-              value={row.actualReps[sIndex] || ''}
-              onChange={e => update(sIndex, 'reps', Number(e.target.value) || 0)} />
-            {week === 1 && (
-              <Input placeholder='RPE' type='number'
-                value={row.rpe[sIndex] || ''}
-                onChange={e => update(sIndex, 'rpe', Number(e.target.value) || 0)} />
-            )}
-          </div>
-        ))}
-
-        <div className='flex gap-2 mt-2'>
-          <Button size='sm' variant='outline' onClick={addSet}><Plus className='w-3 h-3' />Add</Button>
-          {row.currentSets > 1 && <Button size='sm' variant='outline' onClick={removeSet}><Minus className='w-3 h-3' />Remove</Button>}
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading workout...</p>
         </div>
       </div>
     );
   }
+
+  if (!workout) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">Workout not found</h2>
+          <p className="text-muted-foreground mb-4">The workout you're looking for doesn't exist or you don't have access to it.</p>
+          <Button onClick={() => navigate('/workouts')}>
+            Back to Workouts
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const uniqueMuscleGroups = getUniqueMuscleGroups();
+
+  return (
+    <div className="container mx-auto p-6 max-w-4xl">
+      <div className="flex items-center gap-4 mb-6">
+        <Button variant="outline" size="sm" onClick={() => navigate('/workouts')}>
+          <ChevronLeft className="h-4 w-4 mr-2" />
+          Back to Workouts
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold">{workout.name}</h1>
+          <p className="text-muted-foreground">Week {currentWeek}, Day {currentDay}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-6">
+        {uniqueMuscleGroups.map((muscleGroup) => {
+          const exercises = getExercisesForMuscleGroup(muscleGroup);
+          const isComplete = isMuscleGroupComplete(muscleGroup);
+          const isCompleted = completedMuscleGroups.has(muscleGroup);
+          
+          return (
+            <Card key={muscleGroup} className="relative">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle className="text-xl">{muscleGroup}</CardTitle>
+                <div className="flex items-center gap-2">
+                  {isCompleted && (
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      Completed
+                    </Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => openFeedbackModal(muscleGroup)}
+                    disabled={!isComplete || isCompleted}
+                    className={isComplete && !isCompleted ? "bg-primary" : ""}
+                  >
+                    {isCompleted ? "Completed" : isComplete ? "Complete Group" : "Fill Data First"}
+                  </Button>
+                </div>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {exercises.map((exercise, exerciseIndex) => {
+                  const globalIndex = workoutLogs.findIndex(log => 
+                    log.exercise === exercise.exercise && 
+                    log.muscleGroup === exercise.muscleGroup
+                  );
+                  
+                  return (
+                    <div key={`${exercise.exercise}-${exerciseIndex}`} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium">{exercise.exercise}</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            {exercise.currentSets} sets
+                          </span>
+                          {exercise.completed && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                              Complete
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {Array.from({ length: exercise.currentSets }, (_, setIndex) => (
+                          <div key={setIndex} className="grid grid-cols-4 gap-2 items-center">
+                            <Label className="text-sm font-medium">Set {setIndex + 1}</Label>
+                            
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Weight ({weightUnit})</Label>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                value={exercise.weights[setIndex] || ''}
+                                onChange={(e) => updateSetData(globalIndex, setIndex, 'weight', parseFloat(e.target.value) || 0)}
+                                className="h-8"
+                              />
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <Label className="text-xs text-muted-foreground">Reps</Label>
+                              <Input
+                                type="number"
+                                placeholder="0"
+                                value={exercise.actualReps[setIndex] || ''}
+                                onChange={(e) => updateSetData(globalIndex, setIndex, 'reps', parseInt(e.target.value) || 0)}
+                                className="h-8"
+                              />
+                            </div>
+                            
+                            {currentWeek === 1 && (
+                              <div className="space-y-1">
+                                <Label className="text-xs text-muted-foreground">RPE</Label>
+                                <Input
+                                  type="number"
+                                  placeholder="7"
+                                  min="1"
+                                  max="10"
+                                  value={exercise.rpe[setIndex] || ''}
+                                  onChange={(e) => updateSetData(globalIndex, setIndex, 'rpe', parseInt(e.target.value) || 7)}
+                                  className="h-8"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addSet(globalIndex)}
+                          className="h-8 px-3"
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add Set
+                        </Button>
+                        
+                        {exercise.currentSets > 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => removeSet(globalIndex)}
+                            className="h-8 px-3"
+                          >
+                            <Minus className="h-3 w-3 mr-1" />
+                            Remove Set
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Feedback Modal */}
+      <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => 
+        !isProcessingFeedback && setFeedbackModal(prev => ({ ...prev, isOpen: open }))
+      }>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete {feedbackModal.muscleGroup}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">How was the muscle pump?</Label>
+              <RadioGroup
+                value={feedback.pumpLevel}
+                onValueChange={(value) => setFeedback(prev => ({ ...prev, pumpLevel: value as any }))}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="none" id="pump-none" />
+                  <Label htmlFor="pump-none" className="text-sm">None / Negligible</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="medium" id="pump-medium" />
+                  <Label htmlFor="pump-medium" className="text-sm">Medium</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="amazing" id="pump-amazing" />
+                  <Label htmlFor="pump-amazing" className="text-sm">Amazing</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is-sore"
+                checked={feedback.isSore}
+                onCheckedChange={(checked) => setFeedback(prev => ({ ...prev, isSore: checked }))}
+              />
+              <Label htmlFor="is-sore" className="text-sm">Muscle feels sore</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="can-add-sets"
+                checked={feedback.canAddSets}
+                onCheckedChange={(checked) => setFeedback(prev => ({ ...prev, canAddSets: checked }))}
+              />
+              <Label htmlFor="can-add-sets" className="text-sm">Could add more sets</Label>
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setFeedbackModal(prev => ({ ...prev, isOpen: false }))}
+              disabled={isProcessingFeedback}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={saveFeedback}
+              disabled={isProcessingFeedback}
+              className="flex-1"
+            >
+              {isProcessingFeedback ? "Saving..." : "Save & Continue"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
