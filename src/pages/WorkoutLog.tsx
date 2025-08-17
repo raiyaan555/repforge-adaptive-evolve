@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -208,8 +208,11 @@ export function WorkoutLog() {
       // Ask SC at start: Week 2+ always; Week 1 only if muscle group repeats earlier in the same week
       const scByGroup: Record<string, 'none'|'medium'|'very_sore'|'extremely_sore'> = {};
       if (user) {
+        // Process muscle groups sequentially to avoid overlapping dialogs
         for (const mg of muscleGroups) {
           let shouldAsk = currentWeek >= 2;
+          console.log(`Week ${currentWeek}: shouldAsk for ${mg}:`, shouldAsk);
+          
           if (!shouldAsk && currentWeek === 1) {
             const { data: sameWeek } = await supabase
               .from('mesocycle')
@@ -220,9 +223,14 @@ export function WorkoutLog() {
               .eq('muscle_group', mg)
               .lt('day_number', currentDay);
             shouldAsk = (sameWeek || []).length > 0;
+            console.log(`Week 1 repeat check for ${mg}:`, shouldAsk, sameWeek);
           }
+          
           if (shouldAsk) {
+            console.log(`Prompting soreness for ${mg}...`);
             const sc = await promptForSoreness(mg);
+            console.log(`Received soreness response for ${mg}:`, sc);
+            
             if (sc) {
               scByGroup[mg] = sc as any;
               await supabase.from('muscle_soreness').insert({
@@ -232,6 +240,7 @@ export function WorkoutLog() {
                 soreness_level: sc,
                 healed: sc === 'none'
               });
+              console.log(`Saved soreness data for ${mg}: ${sc}`);
             }
           }
         }
@@ -695,11 +704,12 @@ export function WorkoutLog() {
     }
   };
 
-  const promptForSoreness = (muscleGroup: string): Promise<string | null> => {
+  const promptForSoreness = useCallback((muscleGroup: string): Promise<string | null> => {
     return new Promise((resolve) => {
+      console.log('Opening soreness dialog for:', muscleGroup);
       setScPrompt({ isOpen: true, muscleGroup, resolve });
     });
-  };
+  }, []);
 
 
   const saveCompletedMesocycle = async () => {
@@ -851,6 +861,16 @@ export function WorkoutLog() {
               <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
             </div>
           </div>
+          
+          {/* Temporary test button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => promptForSoreness('Test Muscle')}
+            className="text-xs"
+          >
+            Test Soreness Dialog
+          </Button>
           
         </div>
 
