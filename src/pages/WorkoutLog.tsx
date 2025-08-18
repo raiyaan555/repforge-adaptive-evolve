@@ -119,7 +119,14 @@ export function WorkoutLog() {
         
         console.log('🔍 DEBUG - Using actual week/day values:', actualWeek, actualDay);
         
-        // 3. Initialize workout logs with actual values
+        // ✅ CRITICAL FIX: Stop loading BEFORE initializing workout logs
+        // This allows the soreness modal to show properly
+        if (isMounted) {
+          setLoading(false);
+          console.log('🔍 DEBUG - Loading stopped before workout logs initialization');
+        }
+        
+        // 3. Initialize workout logs with actual values (may show modal)
         console.log('🔍 DEBUG - Initializing workout logs...');
         await initializeWorkoutLogs(workoutData, actualWeek, actualDay);
         
@@ -140,7 +147,6 @@ export function WorkoutLog() {
         }
       } finally {
         if (isMounted) {
-          setLoading(false);
           isInitializing = false;
           console.log('🔍 DEBUG - Initialization complete');
         }
@@ -825,7 +831,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T'),
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
