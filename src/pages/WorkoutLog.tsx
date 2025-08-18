@@ -828,15 +828,15 @@ export function WorkoutLog() {
         .from('completed_mesocycles')
         .insert({
           user_id: user.id,
-          mesocycle_name: workout.name || 'Custom Workout',
-          program_type: workout.program_type || 'Custom',
+          mesocycle_name: workout?.name || 'Custom Workout',
+          program_type: workout?.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
           end_date: new Date().toISOString().split('T')[0],
-          total_weeks: workout.duration_weeks,
-          total_days: workout.days_per_week * workout.duration_weeks,
+          total_weeks: workout?.duration_weeks || 0,
+          total_days: (workout?.days_per_week || 0) * (workout?.duration_weeks || 0),
           mesocycle_data: {
             workouts: mesocycleData || [],
-            workout_structure: workout.workout_structure
+            workout_structure: workout?.workout_structure || {}
           }
         });
 
