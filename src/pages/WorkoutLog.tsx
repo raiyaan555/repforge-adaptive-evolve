@@ -499,7 +499,8 @@ export function WorkoutLog() {
             // Use first set's RPE to determine rep progression (not during deload)
             const firstRpe = prevRpe[0] || 9;
             const repIncrease = firstRpe <= 8 ? 1 : 0;
-            newLog.plannedReps = prevReps + repIncrease;
+            const baseReps = Array.isArray(prevReps) ? prevReps[0] : prevReps;
+            newLog.plannedReps = baseReps + repIncrease;
             console.log(`🔍 DEBUG - Rep progression: ${prevReps} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
           }
 
@@ -824,7 +825,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T'),
+          end_date: new Date().toISOString().split('T')[0],
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
