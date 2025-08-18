@@ -872,11 +872,8 @@ export function WorkoutLog() {
       
     } catch (e) {
       console.error('🔍 DEBUG - Prefill initialization failed:', e);
-      // Fallback to basic logs if everything fails
-      if (baseLogs && baseLogs.length > 0) {
-        const safeLogs = baseLogs.map(log => ensureArrayIntegrity(log));
-        setWorkoutLogs(safeLogs);
-      }
+      // Fallback to logs passed to function if everything fails
+      setWorkoutLogs([]);
     }
   };
 
@@ -913,7 +910,7 @@ export function WorkoutLog() {
         // Update the specific field
         if (field === 'reps') exercise.actualReps[setIndex] = validatedValue;
         else if (field === 'weight') exercise.weights[setIndex] = validatedValue;
-        else if (field === 'rpe') exercise.rpe[setIndex] = validatedValue;
+        else if (field === 'rpe') exercise.rpe[setIndex] = currentWeek === 1 ? 7 : validatedValue;
         
         // Update completion status
         exercise.completed = isExerciseCompleted(exercise);
@@ -1214,7 +1211,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T'),
+          end_date: new Date().toISOString().split('T')[0],
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
@@ -1409,21 +1406,12 @@ export function WorkoutLog() {
                                       </Label>
                                       <Input
                                         type="number"
-                                        value={exercise.rpe?.[setIndex] || ''}
-                                        placeholder="1-10"
-                                        onChange={(e) => {
-                                          const value = validateNumericInput(e.target.value, 'rpe');
-                                          updateSetData(originalIndex, setIndex, 'rpe', value);
-                                        }}
-                                        className="h-8 text-sm"
+                                        value="7"
+                                        placeholder="7"
+                                        disabled
+                                        className="h-8 text-sm bg-muted"
                                         min="1"
                                         max="10"
-                                        onKeyPress={(e) => {
-                                          // Allow only numbers
-                                          if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
-                                            e.preventDefault();
-                                          }
-                                        }}
                                       />
                                     </div>
                                   )}
