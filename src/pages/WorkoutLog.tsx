@@ -70,13 +70,16 @@ export function WorkoutLog() {
     canAddSets: false
   });
 
-  // SC (Soreness) Modal - React-based, sequential
+  // ✅ FIX: SC Modal with explicit value state to reset between muscle groups
   const [scModal, setScModal] = useState<{
     isOpen: boolean;
     muscleGroup: string;
     pendingGroups: string[];
     resolve: (value: string | null) => void;
   }>({ isOpen: false, muscleGroup: '', pendingGroups: [], resolve: () => {} });
+
+  // ✅ FIX: Add separate state for current soreness selection
+  const [currentSorenessValue, setCurrentSorenessValue] = useState<string>('');
 
   const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
@@ -229,7 +232,7 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ FIXED: Simplified sequential SC prompting with debug
+  // ✅ FIX: Updated sequential SC prompting with proper value reset
   const promptForSoreness = useCallback(async (muscleGroups: string[]): Promise<Record<string, string>> => {
     console.log('🔍 DEBUG - promptForSoreness called with:', muscleGroups);
     const results: Record<string, string> = {};
@@ -237,6 +240,9 @@ export function WorkoutLog() {
     for (let i = 0; i < muscleGroups.length; i++) {
       const currentGroup = muscleGroups[i];
       console.log(`🔍 DEBUG - Processing soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
+      
+      // ✅ FIX: Reset soreness value for each new muscle group
+      setCurrentSorenessValue('');
       
       const result = await new Promise<string | null>((resolve) => {
         console.log(`🔍 DEBUG - Setting scModal state for ${currentGroup}`);
@@ -450,6 +456,19 @@ export function WorkoutLog() {
 
       console.log(`🔍 DEBUG - Previous exercise data mapped for ${prevByExercise.size} exercises`);
 
+      // ✅ FIX: Enhanced data validation to prevent failures
+      const safeGetArrayValue = (arr: any, index: number, fallback: any = 0) => {
+        if (!Array.isArray(arr)) {
+          console.log(`🔍 DEBUG - Warning: Expected array but got ${typeof arr}:`, arr);
+          return fallback;
+        }
+        if (index >= arr.length) {
+          console.log(`🔍 DEBUG - Warning: Index ${index} out of bounds for array length ${arr.length}`);
+          return arr[arr.length - 1] || fallback;
+        }
+        return arr[index] || fallback;
+      };
+
       // Apply progression logic to each exercise
       const updatedLogs = baseLogs.map(log => {
         const prev = prevByExercise.get(log.exercise);
@@ -472,7 +491,8 @@ export function WorkoutLog() {
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
             
-            const prevReps = prev.actual_reps?.[0] || newLog.plannedReps;
+            // ✅ FIX: Safe access to previous reps with validation
+            const prevReps = safeGetArrayValue(prev.actual_reps, 0, newLog.plannedReps);
             const deloadReps = Math.max(1, Math.round(prevReps * (1/3)));
             newLog.plannedReps = deloadReps;
             
@@ -492,21 +512,18 @@ export function WorkoutLog() {
             console.log(`🔍 DEBUG - Week 1, no progression applied for ${log.exercise}`);
           }
 
-          // Prefill weights from last week
-          newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => 
-            prev.weight_used?.[i] ?? prev.weight_used?.[0] ?? 0
-          );
+          // ✅ FIX: Safe prefill weights with proper array handling
+          newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => {
+            return safeGetArrayValue(prev.weight_used, i, prev.weight_used?.[0] || 0);
+          });
           console.log(`🔍 DEBUG - Prefilled weights for ${log.exercise}:`, newLog.weights);
 
-          // Prefill reps based on RPE rule
-          const prevReps: number[] = prev.actual_reps || [];
-          const prevRpe: number[] = prev.rpe || [];
-          if (prevReps.length && prevRpe.length && !isDeloadWeek) {
-            // Use first set's RPE to determine rep progression (not during deload)
-            const firstRpe = prevRpe[0] || 9;
+          // ✅ FIX: Safe prefill reps with proper validation
+          if (!isDeloadWeek && prev.actual_reps && prev.rpe) {
+            const prevReps = safeGetArrayValue(prev.actual_reps, 0, newLog.plannedReps);
+            const firstRpe = safeGetArrayValue(prev.rpe, 0, 9);
             const repIncrease = firstRpe <= 8 ? 1 : 0;
-            const baseReps = Array.isArray(prevReps) ? prevReps[0] : prevReps;
-            newLog.plannedReps = baseReps + repIncrease;
+            newLog.plannedReps = prevReps + repIncrease;
             console.log(`🔍 DEBUG - Rep progression: ${prevReps} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
           }
 
@@ -828,15 +845,15 @@ export function WorkoutLog() {
         .from('completed_mesocycles')
         .insert({
           user_id: user.id,
-          mesocycle_name: workout?.name || 'Custom Workout',
-          program_type: workout?.program_type || 'Custom',
+          mesocycle_name: workout.name || 'Custom Workout',
+          program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
-          total_weeks: workout?.duration_weeks || 0,
-          total_days: (workout?.days_per_week || 0) * (workout?.duration_weeks || 0),
+          end_date: new Date().toISOString().split('T'),
+          total_weeks: workout.duration_weeks,
+          total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
             workouts: mesocycleData || [],
-            workout_structure: workout?.workout_structure || {}
+            workout_structure: workout.workout_structure
           }
         });
 
@@ -1070,7 +1087,7 @@ export function WorkoutLog() {
           </DialogContent>
         </Dialog>
 
-        {/* SC (Soreness) Modal */}
+        {/* ✅ FIX: SC (Soreness) Modal with proper value reset */}
         <Dialog open={scModal.isOpen} onOpenChange={() => {}}>
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
@@ -1085,10 +1102,14 @@ export function WorkoutLog() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <RadioGroup onValueChange={(value) => {
-                console.log(`🔍 DEBUG - User selected soreness: ${value} for ${scModal.muscleGroup}`);
-                scModal.resolve(value);
-              }}>
+              <RadioGroup 
+                value={currentSorenessValue} 
+                onValueChange={(value) => {
+                  console.log(`🔍 DEBUG - User selected soreness: ${value} for ${scModal.muscleGroup}`);
+                  setCurrentSorenessValue(value);
+                  scModal.resolve(value);
+                }}
+              >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="none" id="sc-none" />
                   <Label htmlFor="sc-none">None/Negligible</Label>
