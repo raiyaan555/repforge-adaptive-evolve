@@ -113,9 +113,15 @@ export function WorkoutLog() {
           return;
         }
         
-        // 3. Initialize workout logs with proper sequencing
+        // ✅ FIX: Use actual values from database instead of state
+        const actualWeek = activeInfo?.current_week || 1;
+        const actualDay = activeInfo?.current_day || 1;
+        
+        console.log('🔍 DEBUG - Using actual week/day values:', actualWeek, actualDay);
+        
+        // 3. Initialize workout logs with actual values
         console.log('🔍 DEBUG - Initializing workout logs...');
-        await initializeWorkoutLogs(workoutData);
+        await initializeWorkoutLogs(workoutData, actualWeek, actualDay);
         
         // 4. Reset state for new workout
         if (isMounted) {
@@ -253,13 +259,14 @@ export function WorkoutLog() {
     return results;
   }, []);
 
-  const initializeWorkoutLogs = async (workoutData: any) => {
+  // ✅ FIX: Updated function signature to accept actual week/day values
+  const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     const structure = workoutData.workout_structure as WorkoutStructure;
     console.log('🔍 DEBUG - Workout structure:', structure);
-    console.log('🔍 DEBUG - Current week at start:', currentWeek);
-    console.log('🔍 DEBUG - Current day at start:', currentDay);
+    console.log('🔍 DEBUG - Actual week passed:', actualWeek);
+    console.log('🔍 DEBUG - Actual day passed:', actualDay);
     
-    const dayKey = `day${currentDay}`;
+    const dayKey = `day${actualDay}`;
     const dayWorkout = structure[dayKey] || [];
     
     console.log('🔍 DEBUG - Day key:', dayKey);
@@ -293,26 +300,26 @@ export function WorkoutLog() {
     try {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup)));
       console.log('🔍 DEBUG - Unique muscle groups for today:', muscleGroups);
-      console.log('🔍 DEBUG - Current week before SC check:', currentWeek);
+      console.log('🔍 DEBUG - Actual week before SC check:', actualWeek);
       
-      // ✅ FIXED: Sequential SC prompting for multiple muscle groups
+      // ✅ FIXED: Sequential SC prompting for multiple muscle groups using actual week
       const scGroupsToAsk: string[] = [];
       
       for (const mg of muscleGroups) {
-        let shouldAsk = currentWeek >= 2;
-        console.log(`🔍 DEBUG - ${mg}: currentWeek (${currentWeek}) >= 2? ${shouldAsk}`);
+        let shouldAsk = actualWeek >= 2;
+        console.log(`🔍 DEBUG - ${mg}: actualWeek (${actualWeek}) >= 2? ${shouldAsk}`);
         
-        if (!shouldAsk && currentWeek === 1) {
+        if (!shouldAsk && actualWeek === 1) {
           // Check if this muscle group was trained earlier in the same week
-          console.log(`🔍 DEBUG - Checking previous sessions for ${mg} in week ${currentWeek}, day < ${currentDay}`);
+          console.log(`🔍 DEBUG - Checking previous sessions for ${mg} in week ${actualWeek}, day < ${actualDay}`);
           const { data: sameWeek } = await supabase
             .from('mesocycle')
             .select('id, day_number')
             .eq('user_id', user.id)
             .eq('plan_id', workoutId)
-            .eq('week_number', currentWeek)
+            .eq('week_number', actualWeek)
             .eq('muscle_group', mg)
-            .lt('day_number', currentDay);
+            .lt('day_number', actualDay);
           
           console.log(`🔍 DEBUG - Found ${(sameWeek || []).length} previous sessions for ${mg}:`, sameWeek);
           shouldAsk = (sameWeek || []).length > 0;
@@ -325,7 +332,7 @@ export function WorkoutLog() {
           console.log(`🔍 DEBUG - ❌ SKIPPED ${mg} - shouldAsk = false`);
         }
         
-        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${currentWeek})`);
+        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${actualWeek})`);
       }
 
       console.log('🔍 DEBUG - Final scGroupsToAsk array:', scGroupsToAsk);
@@ -356,7 +363,7 @@ export function WorkoutLog() {
       }
 
       // Load previous week data with better error handling
-      const prevWeek = currentWeek - 1;
+      const prevWeek = actualWeek - 1;
       let prevRows: any[] = [];
       
       console.log(`🔍 DEBUG - Looking for previous week data (week ${prevWeek})`);
@@ -446,8 +453,8 @@ export function WorkoutLog() {
         console.log(`🔍 DEBUG - Has previous data: ${!!prev}`);
         
         // ✅ FIXED: Deload logic (final week - reduce to 1/3 except if 1)
-        const isDeloadWeek = currentWeek === workoutData.duration_weeks;
-        console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${currentWeek}/${workoutData.duration_weeks})`);
+        const isDeloadWeek = actualWeek === workoutData.duration_weeks;
+        console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${actualWeek}/${workoutData.duration_weeks})`);
         
         if (prev) {
           let baseSets = prev.actual_sets || log.currentSets;
@@ -464,7 +471,7 @@ export function WorkoutLog() {
             newLog.plannedReps = deloadReps;
             
             console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
-          } else if (currentWeek >= 2) {
+          } else if (actualWeek >= 2) {
             // Normal progression using SC + MPC
             const sc = scResults[log.muscleGroup] as any;
             const pump = pumpByGroup[log.muscleGroup] || 'medium';
@@ -492,8 +499,8 @@ export function WorkoutLog() {
             // Use first set's RPE to determine rep progression (not during deload)
             const firstRpe = prevRpe[0] || 9;
             const repIncrease = firstRpe <= 8 ? 1 : 0;
-            newLog.plannedReps = prevReps[0] + repIncrease;
-            console.log(`🔍 DEBUG - Rep progression: ${prevReps[0]} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
+            newLog.plannedReps = prevReps + repIncrease;
+            console.log(`🔍 DEBUG - Rep progression: ${prevReps} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
           }
 
           // Resize arrays to match current sets
@@ -512,7 +519,7 @@ export function WorkoutLog() {
             newLog.plannedReps = deloadReps;
             
             console.log(`🔍 DEBUG - DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
-          } else if (currentWeek >= 2) {
+          } else if (actualWeek >= 2) {
             // Apply SC + MPC even without previous data
             const sc = scResults[log.muscleGroup] as any;
             const pump = pumpByGroup[log.muscleGroup] || 'medium';
@@ -817,7 +824,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T'),
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
