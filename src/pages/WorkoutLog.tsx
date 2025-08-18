@@ -271,6 +271,56 @@ export function WorkoutLog() {
     return results;
   }, []);
 
+  // ✅ NEW: Function to get weekly sets count per muscle group
+  const getWeeklySetsByMuscleGroup = async (muscleGroups: string[], actualWeek: number) => {
+    const weeklySetsByMuscleGroup: Record<string, number> = {};
+    
+    try {
+      const { data: weeklyData, error } = await supabase
+        .from('mesocycle')
+        .select('muscle_group, actual_sets')
+        .eq('user_id', user.id)
+        .eq('plan_id', workoutId)
+        .eq('week_number', actualWeek)
+        .in('muscle_group', muscleGroups);
+        
+      if (error) throw error;
+      
+      // Calculate total weekly sets per muscle group
+      for (const mg of muscleGroups) {
+        const mgData = weeklyData?.filter(d => d.muscle_group === mg) || [];
+        weeklySetsByMuscleGroup[mg] = mgData.reduce((total, d) => total + (d.actual_sets || 0), 0);
+        console.log(`🔍 DEBUG - Weekly sets for ${mg}: ${weeklySetsByMuscleGroup[mg]}`);
+      }
+    } catch (error) {
+      console.error('🔍 DEBUG - Failed to load weekly sets data:', error);
+      // Default to 0 if we can't load data
+      for (const mg of muscleGroups) {
+        weeklySetsByMuscleGroup[mg] = 0;
+      }
+    }
+    
+    return weeklySetsByMuscleGroup;
+  };
+
+  // ✅ NEW: Function to find exercise with min/max sets in a muscle group
+  const findExerciseForSetAdjustment = (logs: WorkoutLog[], muscleGroup: string, isIncrease: boolean) => {
+    const mgExercises = logs.filter(log => log.muscleGroup === muscleGroup);
+    if (mgExercises.length === 0) return null;
+    
+    if (isIncrease) {
+      // Find exercise with minimum sets
+      return mgExercises.reduce((min, current) => 
+        current.currentSets < min.currentSets ? current : min
+      );
+    } else {
+      // Find exercise with maximum sets
+      return mgExercises.reduce((max, current) => 
+        current.currentSets > max.currentSets ? current : max
+      );
+    }
+  };
+
   // ✅ FIX: Updated function signature to accept actual week/day values
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     const structure = workoutData.workout_structure as WorkoutStructure;
@@ -374,6 +424,9 @@ export function WorkoutLog() {
         });
       }
 
+      // ✅ NEW: Get weekly sets count per muscle group
+      const weeklySetsByMuscleGroup = await getWeeklySetsByMuscleGroup(muscleGroups, actualWeek);
+
       // Load previous week data with better error handling
       const prevWeek = actualWeek - 1;
       let prevRows: any[] = [];
@@ -469,6 +522,20 @@ export function WorkoutLog() {
         return arr[index] || fallback;
       };
 
+      // ✅ NEW: Calculate set adjustments per muscle group first
+      const muscleGroupAdjustments: Record<string, number> = {};
+      for (const mg of muscleGroups) {
+        if (actualWeek >= 2) {
+          const sc = scResults[mg] as any;
+          const pump = pumpByGroup[mg] || 'medium';
+          const adjustment = setsAdjustment(sc, pump);
+          muscleGroupAdjustments[mg] = adjustment;
+          console.log(`🔍 DEBUG - Muscle group ${mg} adjustment: ${adjustment} sets (SC:${sc}, MPC:${pump})`);
+        } else {
+          muscleGroupAdjustments[mg] = 0;
+        }
+      }
+
       // Apply progression logic to each exercise
       const updatedLogs = baseLogs.map(log => {
         const prev = prevByExercise.get(log.exercise);
@@ -486,7 +553,7 @@ export function WorkoutLog() {
           console.log(`🔍 DEBUG - Base sets from previous: ${baseSets}`);
           
           if (isDeloadWeek) {
-            // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
+            // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1 (unchanged)
             const deloadSets = Math.max(1, Math.round(baseSets * (1/3)));
             newLog.plannedSets = deloadSets;
             newLog.currentSets = deloadSets;
@@ -497,19 +564,11 @@ export function WorkoutLog() {
             newLog.plannedReps = deloadReps;
             
             console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
-          } else if (actualWeek >= 2) {
-            // Normal progression using SC + MPC
-            const sc = scResults[log.muscleGroup] as any;
-            const pump = pumpByGroup[log.muscleGroup] || 'medium';
-            const setsAdd = setsAdjustment(sc, pump);
-            const targetSets = Math.max(1, baseSets + setsAdd);
-            
-            newLog.plannedSets = targetSets;
-            newLog.currentSets = targetSets;
-            
-            console.log(`🔍 DEBUG - PROGRESSION: ${log.exercise}: ${baseSets} + ${setsAdd} = ${targetSets} sets (SC:${sc}, MPC:${pump})`);
           } else {
-            console.log(`🔍 DEBUG - Week 1, no progression applied for ${log.exercise}`);
+            // Just use base sets, muscle group adjustments will be applied later
+            newLog.plannedSets = baseSets;
+            newLog.currentSets = baseSets;
+            console.log(`🔍 DEBUG - Base sets applied: ${log.exercise}: ${baseSets} sets`);
           }
 
           // ✅ FIX: Safe prefill weights with proper array handling
@@ -543,18 +602,8 @@ export function WorkoutLog() {
             newLog.plannedReps = deloadReps;
             
             console.log(`🔍 DEBUG - DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
-          } else if (actualWeek >= 2) {
-            // Apply SC + MPC even without previous data
-            const sc = scResults[log.muscleGroup] as any;
-            const pump = pumpByGroup[log.muscleGroup] || 'medium';
-            const setsAdd = setsAdjustment(sc, pump);
-            const targetSets = Math.max(1, newLog.currentSets + setsAdd);
-            
-            newLog.plannedSets = targetSets;
-            newLog.currentSets = targetSets;
-            
-            console.log(`🔍 DEBUG - PROGRESSION (no prev): ${log.exercise}: ${newLog.currentSets} + ${setsAdd} = ${targetSets} sets`);
           }
+          // For new exercises, keep base sets - muscle group adjustments will be applied later
           
           // Initialize arrays
           newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
@@ -566,7 +615,68 @@ export function WorkoutLog() {
         return newLog;
       });
 
-      console.log('🔍 DEBUG - Final initialized logs:', updatedLogs);
+      // ✅ NEW: Apply muscle group-based set adjustments
+      if (!isDeloadWeek && actualWeek >= 2) {
+        for (const mg of muscleGroups) {
+          const adjustment = muscleGroupAdjustments[mg];
+          if (adjustment === 0) continue;
+
+          const mgLogs = updatedLogs.filter(log => log.muscleGroup === mg);
+          if (mgLogs.length === 0) continue;
+
+          if (adjustment > 0) {
+            // ✅ NEW: Check weekly limit before increasing
+            const currentWeeklySets = weeklySetsByMuscleGroup[mg];
+            const todayTotalSets = mgLogs.reduce((total, log) => total + log.currentSets, 0);
+            const projectedWeeklySets = currentWeeklySets + todayTotalSets + adjustment;
+
+            if (projectedWeeklySets > 21) {
+              console.log(`🔍 DEBUG - ${mg}: Cannot increase sets. Weekly limit reached (${currentWeeklySets} + ${todayTotalSets} + ${adjustment} = ${projectedWeeklySets} > 21)`);
+              toast({
+                title: "Weekly Set Limit Reached",
+                description: `${mg} has already reached 21 sets this week. Cannot auto-increase further.`,
+                variant: "default"
+              });
+              continue;
+            }
+
+            // Find exercise with minimum sets to increase
+            const targetExercise = findExerciseForSetAdjustment(mgLogs, mg, true);
+            if (targetExercise) {
+              targetExercise.currentSets += adjustment;
+              targetExercise.plannedSets = targetExercise.currentSets;
+              
+              // Resize arrays
+              while (targetExercise.actualReps.length < targetExercise.currentSets) {
+                targetExercise.actualReps.push(0);
+                targetExercise.weights.push(targetExercise.weights[targetExercise.weights.length - 1] || 0);
+                targetExercise.rpe.push(7);
+              }
+              
+              console.log(`🔍 DEBUG - INCREASED: ${targetExercise.exercise} by ${adjustment} sets (now ${targetExercise.currentSets} sets)`);
+            }
+          } else {
+            // Find exercise with maximum sets to decrease
+            const targetExercise = findExerciseForSetAdjustment(mgLogs, mg, false);
+            if (targetExercise) {
+              const newSets = Math.max(1, targetExercise.currentSets + adjustment); // Min 1 set
+              const actualDecrease = targetExercise.currentSets - newSets;
+              
+              targetExercise.currentSets = newSets;
+              targetExercise.plannedSets = newSets;
+              
+              // Resize arrays
+              targetExercise.actualReps = targetExercise.actualReps.slice(0, newSets);
+              targetExercise.weights = targetExercise.weights.slice(0, newSets);
+              targetExercise.rpe = targetExercise.rpe.slice(0, newSets);
+              
+              console.log(`🔍 DEBUG - DECREASED: ${targetExercise.exercise} by ${actualDecrease} sets (now ${targetExercise.currentSets} sets)`);
+            }
+          }
+        }
+      }
+
+      console.log('🔍 DEBUG - Final initialized logs with muscle group adjustments:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
@@ -848,7 +958,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T'),
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
