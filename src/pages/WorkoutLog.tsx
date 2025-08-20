@@ -388,7 +388,76 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ ENHANCED: Function with comprehensive fallbacks and validation
+  // ✅ COMPLETELY REWRITTEN: New function to get MOST RECENT occurrence of same exercise
+  const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number) => {
+    try {
+      console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup})`);
+      
+      // Get all previous occurrences of this exact exercise, sorted by most recent first
+      const { data: exerciseHistory, error } = await supabase
+        .from('mesocycle')
+        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number')
+        .eq('user_id', user.id)
+        .eq('plan_id', workoutId)
+        .eq('exercise_name', exerciseName)
+        .eq('muscle_group', muscleGroup)
+        .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`)
+        .order('week_number', { ascending: false })
+        .order('day_number', { ascending: false })
+        .limit(1);
+        
+      if (error) throw error;
+      
+      const mostRecent = exerciseHistory?.[0];
+      console.log(`🔍 DEBUG - Most recent data for ${exerciseName}:`, mostRecent);
+      
+      return mostRecent || null;
+    } catch (error) {
+      console.error(`🔍 DEBUG - Failed to get recent data for ${exerciseName}:`, error);
+      return null;
+    }
+  };
+
+  // ✅ NEW: Function to get best performing set metrics
+  const getBestSetMetrics = (actualReps: any[], rpe: any[]) => {
+    try {
+      if (!Array.isArray(actualReps) || !Array.isArray(rpe) || actualReps.length === 0) {
+        return { bestReps: 0, averageRpe: 7 };
+      }
+
+      // Convert to numbers and filter valid data
+      const validSets = [];
+      for (let i = 0; i < Math.min(actualReps.length, rpe.length); i++) {
+        const reps = Number(actualReps[i]) || 0;
+        const rpeVal = Number(rpe[i]) || 7;
+        if (reps > 0) {
+          validSets.push({ reps, rpe: rpeVal });
+        }
+      }
+
+      if (validSets.length === 0) {
+        return { bestReps: 0, averageRpe: 7 };
+      }
+
+      // Find best performing set (highest reps, or if tied, lowest RPE)
+      const bestSet = validSets.reduce((best, current) => {
+        if (current.reps > best.reps) return current;
+        if (current.reps === best.reps && current.rpe < best.rpe) return current;
+        return best;
+      });
+
+      // Calculate average RPE across all sets
+      const averageRpe = validSets.reduce((sum, set) => sum + set.rpe, 0) / validSets.length;
+
+      console.log(`🔍 DEBUG - Best set metrics: reps=${bestSet.reps}, avgRPE=${averageRpe.toFixed(1)}`);
+      return { bestReps: bestSet.reps, averageRpe };
+    } catch (error) {
+      console.error('🔍 DEBUG - Error calculating best set metrics:', error);
+      return { bestReps: 0, averageRpe: 7 };
+    }
+  };
+
+  // ✅ COMPLETELY REWRITTEN: Enhanced function with proper same-exercise progression
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     try {
       const structure = workoutData?.workout_structure as WorkoutStructure;
@@ -526,59 +595,39 @@ export function WorkoutLog() {
       // ✅ NEW: Get weekly sets count per muscle group
       const weeklySetsByMuscleGroup = await getWeeklySetsByMuscleGroup(muscleGroups, actualWeek);
 
-      // Load previous week data with better error handling
-      const prevWeek = actualWeek - 1;
-      let prevRows: any[] = [];
-      
-      console.log(`🔍 DEBUG - Looking for previous week data (week ${prevWeek})`);
-      
-      if (prevWeek >= 1 && user) {
-        try {
-          const { data: rows, error } = await supabase
-            .from('mesocycle')
-            .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, day_number')
-            .eq('user_id', user.id)
-            .eq('plan_id', workoutId)
-            .eq('week_number', prevWeek)
-            .in('muscle_group', muscleGroups);
-            
-          if (error) throw error;
-          prevRows = rows || [];
-          console.log(`🔍 DEBUG - Loaded ${prevRows.length} previous week records`);
-          console.log('🔍 DEBUG - Previous week data:', prevRows);
-        } catch (error) {
-          console.error('🔍 DEBUG - Failed to load previous week data:', error);
-          prevRows = [];
-        }
-      } else {
-        console.log(`🔍 DEBUG - Skipping previous week data (prevWeek=${prevWeek}, user=${!!user})`);
-      }
-
-      // ✅ FIXED: Corrected mapPump function with proper comparison operators
-      const mapPump = (p?: string) => {
-        if (!p) return 'medium';
-        if (p === 'negligible' || p === 'low' || p === 'none') return 'none';
-        if (p === 'moderate' || p === 'medium') return 'medium';
-        return 'amazing';
-      };
-
+      // ✅ NEW: Get previous pump levels for muscle groups (for MPC calculation)
       const pumpByGroup: Record<string, 'none'|'medium'|'amazing'> = {};
-      for (const mg of muscleGroups) {
-        // Get most recent pump level for this muscle group (across all exercises)
-        const mgRows = prevRows.filter(r => r?.muscle_group === mg && r?.pump_level);
-        console.log(`🔍 DEBUG - Found ${mgRows.length} pump records for ${mg}`);
-        if (mgRows.length > 0) {
-          // Sort by day_number descending and take the first (most recent)
-          const recent = mgRows.sort((a, b) => (Number(b?.day_number) || 0) - (Number(a?.day_number) || 0))[0];
-          pumpByGroup[mg] = mapPump(recent.pump_level);
-          console.log(`🔍 DEBUG - ${mg} previous pump: ${recent.pump_level} → mapped to: ${pumpByGroup[mg]}`);
-        } else {
-          pumpByGroup[mg] = 'medium';
-          console.log(`🔍 DEBUG - ${mg} no previous pump data → defaulted to: medium`);
+      if (actualWeek >= 2) {
+        try {
+          const { data: pumpData, error } = await supabase
+            .from('pump_feedback')
+            .select('muscle_group, pump_level')
+            .eq('user_id', user.id)
+            .order('workout_date', { ascending: false })
+            .limit(50);
+            
+          if (!error && pumpData) {
+            for (const mg of muscleGroups) {
+              const recentPump = pumpData.find(p => p.muscle_group === mg);
+              if (recentPump) {
+                const mapped = recentPump.pump_level === 'none' ? 'none' : 
+                              recentPump.pump_level === 'amazing' ? 'amazing' : 'medium';
+                pumpByGroup[mg] = mapped;
+                console.log(`🔍 DEBUG - ${mg} previous pump: ${recentPump.pump_level} → ${mapped}`);
+              } else {
+                pumpByGroup[mg] = 'medium';
+              }
+            }
+          }
+        } catch (error) {
+          console.error('🔍 DEBUG - Failed to load pump data:', error);
+          for (const mg of muscleGroups) {
+            pumpByGroup[mg] = 'medium';
+          }
         }
       }
 
-      // ✅ FIXED: Sets adjustment function with proper comparison operators
+      // ✅ FIXED: Sets adjustment function
       const setsAdjustment = (
         sc: 'none'|'medium'|'very_sore'|'extremely_sore'|undefined,
         pump: 'none'|'medium'|'amazing'
@@ -595,86 +644,6 @@ export function WorkoutLog() {
         return 0;
       };
 
-      // ✅ FIXED: Better exercise mapping for multiple exercises per muscle group
-      const prevByExercise = new Map<string, any>();
-      prevRows
-        .filter(r => r?.exercise_name) // Filter out invalid records
-        .sort((a,b) => (Number(b?.day_number) || 0) - (Number(a?.day_number) || 0))
-        .forEach(r => { 
-          if (!prevByExercise.has(r.exercise_name)) {
-            prevByExercise.set(r.exercise_name, r); 
-            console.log(`🔍 DEBUG - Mapped previous data for exercise: ${r.exercise_name}`);
-          }
-        });
-
-      console.log(`🔍 DEBUG - Previous exercise data mapped for ${prevByExercise.size} exercises`);
-
-      // ✅ ENHANCED: Comprehensive data validation with multiple fallback layers
-      const safeGetArrayValue = (arr: any, index: number, fallback: any = 0) => {
-        try {
-          if (!Array.isArray(arr)) {
-            console.log(`🔍 DEBUG - Warning: Expected array but got ${typeof arr}:`, arr);
-            return fallback;
-          }
-          if (index < 0 || index >= arr.length) {
-            console.log(`🔍 DEBUG - Warning: Index ${index} out of bounds for array length ${arr.length}`);
-            return arr[arr.length - 1] || fallback;
-          }
-          const value = arr[index];
-          return (value !== null && value !== undefined && !isNaN(Number(value))) ? Number(value) : fallback;
-        } catch (error) {
-          console.error('🔍 DEBUG - Error in safeGetArrayValue:', error);
-          return fallback;
-        }
-      };
-
-      // ✅ ENHANCED: Smart weight prefilling with multiple fallback options
-      const getSmartWeightFallback = (exerciseName: string, muscleGroup: string) => {
-        // Muscle group based weight defaults (rough estimates for beginners)
-        const weightDefaults: Record<string, number> = {
-          'Chest': 20,
-          'Back': 25, 
-          'Shoulders': 10,
-          'Arms': 10,
-          'Biceps': 10,
-          'Triceps': 10,
-          'Legs': 30,
-          'Quads': 30,
-          'Hamstrings': 20,
-          'Glutes': 25,
-          'Calves': 15,
-          'Core': 0, // Often bodyweight
-          'Abs': 0
-        };
-
-        // Exercise-specific fallbacks
-        const exerciseDefaults: Record<string, number> = {
-          'Push-up': 0,
-          'Pull-up': 0,
-          'Chin-up': 0,
-          'Plank': 0,
-          'Squat': 20,
-          'Deadlift': 40,
-          'Bench Press': 20,
-          'Row': 20
-        };
-
-        // Check exercise name first
-        const exerciseKey = Object.keys(exerciseDefaults).find(key => 
-          exerciseName.toLowerCase().includes(key.toLowerCase())
-        );
-        if (exerciseKey) return exerciseDefaults[exerciseKey];
-
-        // Check muscle group
-        const muscleKey = Object.keys(weightDefaults).find(key => 
-          muscleGroup.toLowerCase().includes(key.toLowerCase())
-        );
-        if (muscleKey) return weightDefaults[muscleKey];
-
-        // Final fallback
-        return 10;
-      };
-
       // ✅ NEW: Calculate set adjustments per muscle group first
       const muscleGroupAdjustments: Record<string, number> = {};
       for (const mg of muscleGroups) {
@@ -689,35 +658,48 @@ export function WorkoutLog() {
         }
       }
 
-      // Apply progression logic to each exercise with enhanced prefilling
-      const updatedLogs = baseLogs.map(log => {
+      // ✅ COMPLETELY REWRITTEN: Apply progression logic with SAME EXERCISE focus
+      const updatedLogs = [];
+      for (const log of baseLogs) {
         try {
-          const prev = prevByExercise.get(log.exercise);
           let newLog = { ...log };
           
           console.log(`🔍 DEBUG - Processing ${log.exercise} (${log.muscleGroup})`);
-          console.log(`🔍 DEBUG - Has previous data: ${!!prev}`);
+          
+          // ✅ FIX: Week 1 should have NO prefills - start completely empty
+          if (actualWeek === 1) {
+            console.log(`🔍 DEBUG - Week 1: ${log.exercise} - No prefills, starting empty`);
+            newLog.weights = Array(newLog.currentSets).fill(0);
+            newLog.actualReps = Array(newLog.currentSets).fill(0);
+            newLog.rpe = Array(newLog.currentSets).fill(7);
+            updatedLogs.push(ensureArrayIntegrity(newLog));
+            continue;
+          }
+
+          // ✅ NEW: Get most recent occurrence of this EXACT exercise
+          const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay);
+          console.log(`🔍 DEBUG - Recent data for ${log.exercise}:`, recentExercise ? 'Found' : 'Not found');
           
           // ✅ FIXED: Deload logic (final week - reduce to 1/3 except if 1)
           const isDeloadWeek = actualWeek === workoutData.duration_weeks;
           console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${actualWeek}/${workoutData.duration_weeks})`);
           
-          if (prev) {
-            let baseSets = Math.max(1, Number(prev.actual_sets) || log.currentSets);
-            console.log(`🔍 DEBUG - Base sets from previous: ${baseSets}`);
+          if (recentExercise) {
+            let baseSets = Math.max(1, Number(recentExercise.actual_sets) || log.currentSets);
+            console.log(`🔍 DEBUG - Base sets from most recent: ${baseSets}`);
             
             if (isDeloadWeek) {
-              // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1 (unchanged)
+              // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
               const deloadSets = Math.max(1, Math.round(baseSets * (1/3)));
               newLog.plannedSets = deloadSets;
               newLog.currentSets = deloadSets;
               
-              // ✅ ENHANCED: Safe access to previous reps with multiple fallbacks
-              const prevReps = safeGetArrayValue(prev.actual_reps, 0, newLog.plannedReps);
-              const deloadReps = Math.max(1, Math.round(prevReps * (1/3)));
+              // Use best reps from previous performance
+              const { bestReps } = getBestSetMetrics(recentExercise.actual_reps, recentExercise.rpe);
+              const deloadReps = Math.max(1, Math.round(bestReps * (1/3)));
               newLog.plannedReps = deloadReps;
               
-              console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${prevReps} → ${deloadReps}`);
+              console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${bestReps} → ${deloadReps}`);
             } else {
               // Just use base sets, muscle group adjustments will be applied later
               newLog.plannedSets = baseSets;
@@ -725,72 +707,65 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - Base sets applied: ${log.exercise}: ${baseSets} sets`);
             }
 
-            // ✅ ENHANCED: Smart weight prefilling with comprehensive fallbacks
-            newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => {
-              let weight = safeGetArrayValue(prev.weight_used, i, null);
-              
-              if (weight === null || weight === 0) {
-                // Try to get weight from previous set in same exercise
-                weight = safeGetArrayValue(prev.weight_used, 0, null);
-              }
-              
-              if (weight === null || weight === 0) {
-                // Use smart fallback based on exercise/muscle group
-                weight = getSmartWeightFallback(log.exercise, log.muscleGroup);
-              }
-              
-              return Math.max(0, weight);
-            });
-            console.log(`🔍 DEBUG - Prefilled weights for ${log.exercise}:`, newLog.weights);
-
-            // ✅ ENHANCED: Smart rep prefilling with validation
-            if (!isDeloadWeek && prev.actual_reps && prev.rpe) {
-              const prevReps = safeGetArrayValue(prev.actual_reps, 0, newLog.plannedReps);
-              const firstRpe = safeGetArrayValue(prev.rpe, 0, 9);
-              const repIncrease = firstRpe <= 8 ? 1 : 0;
-              newLog.plannedReps = Math.max(1, prevReps + repIncrease);
-              console.log(`🔍 DEBUG - Rep progression: ${prevReps} + ${repIncrease} = ${newLog.plannedReps} (RPE was ${firstRpe})`);
+            // ✅ ENHANCED: ALWAYS prefill weights from most recent performance with comprehensive fallbacks
+            const prevWeights = recentExercise.weight_used;
+            if (Array.isArray(prevWeights) && prevWeights.length > 0) {
+              // Use actual weights from previous performance
+              newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => {
+                const weight = Number(prevWeights[i] || prevWeights[0] || 0);
+                return Math.max(0, weight);
+              });
+              console.log(`🔍 DEBUG - ✅ PREFILLED weights for ${log.exercise}:`, newLog.weights);
+            } else {
+              // Fallback: try to extract from other formats or use defaults
+              const fallbackWeight = Number(prevWeights) || 0;
+              newLog.weights = Array(newLog.currentSets).fill(Math.max(0, fallbackWeight));
+              console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // Resize arrays to match current sets
-            newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
-            newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
+            // ✅ ENHANCED: ALWAYS prefill reps using best set performance + progression
+            if (!isDeloadWeek) {
+              const { bestReps, averageRpe } = getBestSetMetrics(recentExercise.actual_reps, recentExercise.rpe);
+              const repIncrease = averageRpe <= 8 ? 1 : 0; // Only increase if average RPE was 8 or less
+              newLog.plannedReps = Math.max(1, bestReps + repIncrease);
+              console.log(`🔍 DEBUG - ✅ REP PROGRESSION: ${bestReps} + ${repIncrease} = ${newLog.plannedReps} (avgRPE: ${averageRpe.toFixed(1)})`);
+            }
+
+            // Initialize tracking arrays
+            newLog.actualReps = Array(newLog.currentSets).fill(0);
+            newLog.rpe = Array(newLog.currentSets).fill(7);
             
           } else {
-            console.log(`🔍 DEBUG - No previous data for ${log.exercise}`);
-            // No previous data - handle deload and new exercises
+            console.log(`🔍 DEBUG - No previous data for ${log.exercise} - using template values`);
+            
+            // Handle deload for new exercises
             if (isDeloadWeek) {
-              // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
               const deloadSets = Math.max(1, Math.round(newLog.currentSets * (1/3)));
               const deloadReps = Math.max(1, Math.round(newLog.plannedReps * (1/3)));
               newLog.plannedSets = deloadSets;
               newLog.currentSets = deloadSets;
               newLog.plannedReps = deloadReps;
-              
               console.log(`🔍 DEBUG - DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
             }
             
-            // ✅ NEW: Always prefill weights for new exercises with smart defaults
-            const defaultWeight = getSmartWeightFallback(log.exercise, log.muscleGroup);
-            newLog.weights = Array.from({ length: newLog.currentSets }, () => defaultWeight);
-            console.log(`🔍 DEBUG - Set default weights for new exercise ${log.exercise}:`, newLog.weights);
-            
-            // Initialize arrays with proper defaults
-            newLog.actualReps = Array.from({ length: newLog.currentSets }, () => 0);
-            newLog.rpe = Array.from({ length: newLog.currentSets }, () => 7);
+            // For week 2+, still start with empty values for new exercises
+            newLog.weights = Array(newLog.currentSets).fill(0);
+            newLog.actualReps = Array(newLog.currentSets).fill(0);
+            newLog.rpe = Array(newLog.currentSets).fill(7);
+            console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values`);
           }
           
           // ✅ NEW: Final validation to ensure data integrity
           newLog = ensureArrayIntegrity(newLog);
           
           console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, ${newLog.plannedReps} reps`);
-          return newLog;
+          updatedLogs.push(newLog);
         } catch (error) {
           console.error(`🔍 DEBUG - Error processing exercise ${log.exercise}:`, error);
           // Return log with safe defaults
-          return ensureArrayIntegrity(log);
+          updatedLogs.push(ensureArrayIntegrity(log));
         }
-      });
+      }
 
       // ✅ NEW: Apply muscle group-based set adjustments with enhanced error handling
       const isDeloadWeek = actualWeek === workoutData.duration_weeks;
@@ -867,12 +842,12 @@ export function WorkoutLog() {
         }
       }
 
-      console.log('🔍 DEBUG - Final initialized logs with muscle group adjustments:', updatedLogs);
+      console.log('🔍 DEBUG - Final initialized logs with same-exercise progression:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
       console.error('🔍 DEBUG - Prefill initialization failed:', e);
-      // Fallback to logs passed to function if everything fails
+      // Fallback to empty logs
       setWorkoutLogs([]);
     }
   };
@@ -910,7 +885,7 @@ export function WorkoutLog() {
         // Update the specific field
         if (field === 'reps') exercise.actualReps[setIndex] = validatedValue;
         else if (field === 'weight') exercise.weights[setIndex] = validatedValue;
-        else if (field === 'rpe') exercise.rpe[setIndex] = currentWeek === 1 ? 7 : validatedValue;
+        else if (field === 'rpe') exercise.rpe[setIndex] = validatedValue;
         
         // Update completion status
         exercise.completed = isExerciseCompleted(exercise);
@@ -1211,7 +1186,7 @@ export function WorkoutLog() {
           mesocycle_name: workout.name || 'Custom Workout',
           program_type: workout.program_type || 'Custom',
           start_date: new Date(activeWorkout.started_at).toISOString().split('T')[0],
-          end_date: new Date().toISOString().split('T')[0],
+          end_date: new Date().toISOString().split('T'),
           total_weeks: workout.duration_weeks,
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
@@ -1359,7 +1334,7 @@ export function WorkoutLog() {
                                     <Input
                                       type="number"
                                       value={exercise.weights?.[setIndex] || ''}
-                                      placeholder="e.g. 20"
+                                      placeholder={currentWeek === 1 ? "" : "Previous weight"}
                                       onChange={(e) => {
                                         const value = validateNumericInput(e.target.value, 'weight');
                                         updateSetData(originalIndex, setIndex, 'weight', value);
@@ -1383,7 +1358,7 @@ export function WorkoutLog() {
                                     <Input
                                       type="number"
                                       value={exercise.actualReps?.[setIndex] || ''}
-                                      placeholder={String(exercise.plannedReps || '')}
+                                      placeholder={currentWeek === 1 ? String(exercise.plannedReps || '') : "Target reps"}
                                       onChange={(e) => {
                                         const value = validateNumericInput(e.target.value, 'reps');
                                         updateSetData(originalIndex, setIndex, 'reps', value);
@@ -1406,12 +1381,21 @@ export function WorkoutLog() {
                                       </Label>
                                       <Input
                                         type="number"
-                                        value="7"
-                                        placeholder="7"
-                                        disabled
-                                        className="h-8 text-sm bg-muted"
+                                        value={exercise.rpe?.[setIndex] || ''}
+                                        placeholder="1-10"
+                                        onChange={(e) => {
+                                          const value = validateNumericInput(e.target.value, 'rpe');
+                                          updateSetData(originalIndex, setIndex, 'rpe', value);
+                                        }}
+                                        className="h-8 text-sm"
                                         min="1"
                                         max="10"
+                                        onKeyPress={(e) => {
+                                          // Allow only numbers
+                                          if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
+                                            e.preventDefault();
+                                          }
+                                        }}
                                       />
                                     </div>
                                   )}
