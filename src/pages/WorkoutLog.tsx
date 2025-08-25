@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, Plus, Minus } from 'lucide-react';
+import { ChevronLeft, Plus, Minus, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -84,6 +84,29 @@ export function WorkoutLog() {
   const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
 
+  // ✅ NEW: RPE Info Modal
+  const [rpeInfoModal, setRpeInfoModal] = useState(false);
+
+  // ✅ NEW: Function to get target RPE based on week and set position
+  const getTargetRPE = (week: number, setIndex: number, totalSets: number) => {
+    if (week === 1) return 7;
+    if (week === 7) return 7; // Deload week
+    
+    const isLastSet = setIndex === totalSets - 1;
+    
+    if (week >= 2 && week <= 3) {
+      return isLastSet ? 9 : 8;
+    }
+    if (week >= 4 && week <= 5) {
+      return isLastSet ? 10 : 9;
+    }
+    if (week === 6) {
+      return 10;
+    }
+    
+    return 7; // fallback
+  };
+
   // ✅ NEW: Input validation helpers
   const validateNumericInput = (value: string, field: 'reps' | 'weight' | 'rpe'): number => {
     // Remove non-numeric characters except decimal point
@@ -120,7 +143,7 @@ export function WorkoutLog() {
       correctedExercise.weights[i] || 0
     );
     correctedExercise.rpe = Array.from({ length: targetLength }, (_, i) => 
-      correctedExercise.rpe[i] || 7
+      correctedExercise.rpe[i] || getTargetRPE(currentWeek, i, targetLength)
     );
     
     return correctedExercise;
@@ -504,7 +527,7 @@ export function WorkoutLog() {
             plannedReps: defaultReps,
             actualReps: Array(defaultSets).fill(0),
             weights: Array(defaultSets).fill(0),
-            rpe: Array(defaultSets).fill(7),
+            rpe: Array(defaultSets).fill(getTargetRPE(actualWeek, 0, defaultSets)),
             completed: false,
             currentSets: defaultSets,
           });
@@ -731,9 +754,11 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - ✅ REP PROGRESSION: ${bestReps} + ${repIncrease} = ${newLog.plannedReps} (avgRPE: ${averageRpe.toFixed(1)})`);
             }
 
-            // Initialize tracking arrays
+            // Initialize tracking arrays with target RPEs
             newLog.actualReps = Array(newLog.currentSets).fill(0);
-            newLog.rpe = Array(newLog.currentSets).fill(7);
+            newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
+              getTargetRPE(actualWeek, i, newLog.currentSets)
+            );
             
           } else {
             console.log(`🔍 DEBUG - No previous data for ${log.exercise} - using template values`);
@@ -751,7 +776,9 @@ export function WorkoutLog() {
             // For week 2+, still start with empty values for new exercises
             newLog.weights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
-            newLog.rpe = Array(newLog.currentSets).fill(7);
+            newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
+              getTargetRPE(actualWeek, i, newLog.currentSets)
+            );
             console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values`);
           }
           
@@ -806,7 +833,8 @@ export function WorkoutLog() {
                   targetExercise.actualReps.push(0);
                   const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
                   targetExercise.weights.push(Number(lastWeight) || 0);
-                  targetExercise.rpe.push(7);
+                  const newSetIndex = targetExercise.rpe.length;
+                  targetExercise.rpe.push(getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets));
                 }
                 
                 // Ensure integrity
@@ -879,7 +907,7 @@ export function WorkoutLog() {
           exercise.weights.push(0);
         }
         while (exercise.rpe.length < exercise.currentSets) {
-          exercise.rpe.push(7);
+          exercise.rpe.push(getTargetRPE(currentWeek, exercise.rpe.length, exercise.currentSets));
         }
         
         // Update the specific field
@@ -915,7 +943,8 @@ export function WorkoutLog() {
         exercise.currentSets++;
         exercise.actualReps.push(0);
         exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
-        exercise.rpe.push(7);
+        const newSetIndex = exercise.rpe.length;
+        exercise.rpe.push(getTargetRPE(currentWeek, newSetIndex, exercise.currentSets));
         exercise.completed = false;
         
         return updatedLogs;
@@ -956,17 +985,20 @@ export function WorkoutLog() {
     try {
       if (!exercise) return false;
       
-      const requireRpe = currentWeek === 1;
       for (let i = 0; i < exercise.currentSets; i++) {
         const reps = exercise.actualReps?.[i];
         const weight = exercise.weights?.[i];
-        const rpe = exercise.rpe?.[i];
         
         if (!reps || reps === 0 || weight === null || weight === undefined) {
           return false;
         }
-        if (requireRpe && (!rpe || rpe < 1 || rpe > 10)) {
-          return false;
+        
+        // Week 1 requires RPE input, other weeks don't
+        if (currentWeek === 1) {
+          const rpe = exercise.rpe?.[i];
+          if (!rpe || rpe < 1 || rpe > 10) {
+            return false;
+          }
         }
       }
       return true;
@@ -1321,75 +1353,62 @@ export function WorkoutLog() {
                           </div>
                         
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                            {Array.from({ length: exercise.currentSets }).map((_, setIndex) => (
-                              <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
-                                <Label className="text-xs sm:text-sm font-medium mb-2 block">
-                                  Set {setIndex + 1}
-                                </Label>
-                                <div className="space-y-2">
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">
-                                      Weight ({weightUnit})
+                            {Array.from({ length: exercise.currentSets }).map((_, setIndex) => {
+                              const targetRPE = getTargetRPE(currentWeek, setIndex, exercise.currentSets);
+                              
+                              return (
+                                <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <Label className="text-xs sm:text-sm font-medium">
+                                      Set {setIndex + 1}
                                     </Label>
-                                    <Input
-                                      type="number"
-                                      value={exercise.weights?.[setIndex] || ''}
-                                      placeholder={currentWeek === 1 ? "" : "Previous weight"}
-                                      onChange={(e) => {
-                                        const value = validateNumericInput(e.target.value, 'weight');
-                                        updateSetData(originalIndex, setIndex, 'weight', value);
-                                      }}
-                                      className="h-8 text-sm"
-                                      min="0"
-                                      max="999"
-                                      step="0.5"
-                                      onKeyPress={(e) => {
-                                        // Allow only numbers and decimal point
-                                        if (!/[0-9.]/.test(e.key) && e.key !== 'Backspace') {
-                                          e.preventDefault();
-                                        }
-                                      }}
-                                    />
+                                    {/* ✅ NEW: RPE Target Badge for Week 2+ */}
+                                    {currentWeek > 1 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        RPE {targetRPE}
+                                      </Badge>
+                                    )}
                                   </div>
-                                  <div>
-                                    <Label className="text-xs text-muted-foreground">
-                                      Reps
-                                    </Label>
-                                    <Input
-                                      type="number"
-                                      value={exercise.actualReps?.[setIndex] || ''}
-                                      placeholder={currentWeek === 1 ? String(exercise.plannedReps || '') : "Target reps"}
-                                      onChange={(e) => {
-                                        const value = validateNumericInput(e.target.value, 'reps');
-                                        updateSetData(originalIndex, setIndex, 'reps', value);
-                                      }}
-                                      className="h-8 text-sm"
-                                      min="1"
-                                      max="100"
-                                      onKeyPress={(e) => {
-                                        // Allow only numbers
-                                        if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
-                                          e.preventDefault();
-                                        }
-                                      }}
-                                    />
-                                  </div>
-                                  {currentWeek === 1 && (
+                                  <div className="space-y-2">
                                     <div>
                                       <Label className="text-xs text-muted-foreground">
-                                        RPE (1-10) <span className="text-destructive">*</span>
+                                        Weight ({weightUnit})
                                       </Label>
                                       <Input
                                         type="number"
-                                        value={exercise.rpe?.[setIndex] || ''}
-                                        placeholder="1-10"
+                                        value={exercise.weights?.[setIndex] || ''}
+                                        placeholder={currentWeek === 1 ? "" : "Previous weight"}
                                         onChange={(e) => {
-                                          const value = validateNumericInput(e.target.value, 'rpe');
-                                          updateSetData(originalIndex, setIndex, 'rpe', value);
+                                          const value = validateNumericInput(e.target.value, 'weight');
+                                          updateSetData(originalIndex, setIndex, 'weight', value);
+                                        }}
+                                        className="h-8 text-sm"
+                                        min="0"
+                                        max="999"
+                                        step="0.5"
+                                        onKeyPress={(e) => {
+                                          // Allow only numbers and decimal point
+                                          if (!/[0-9.]/.test(e.key) && e.key !== 'Backspace') {
+                                            e.preventDefault();
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">
+                                        Reps
+                                      </Label>
+                                      <Input
+                                        type="number"
+                                        value={exercise.actualReps?.[setIndex] || ''}
+                                        placeholder={currentWeek === 1 ? String(exercise.plannedReps || '') : "Target reps"}
+                                        onChange={(e) => {
+                                          const value = validateNumericInput(e.target.value, 'reps');
+                                          updateSetData(originalIndex, setIndex, 'reps', value);
                                         }}
                                         className="h-8 text-sm"
                                         min="1"
-                                        max="10"
+                                        max="100"
                                         onKeyPress={(e) => {
                                           // Allow only numbers
                                           if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
@@ -1398,10 +1417,34 @@ export function WorkoutLog() {
                                         }}
                                       />
                                     </div>
-                                  )}
+                                    {/* ✅ NEW: Week 1 - Disabled RPE input showing 7, Week 2+ - No RPE input */}
+                                    {currentWeek === 1 && (
+                                      <div>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <Label className="text-xs text-muted-foreground">
+                                            RPE <span className="text-destructive">*</span>
+                                          </Label>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-4 w-4 p-0"
+                                            onClick={() => setRpeInfoModal(true)}
+                                          >
+                                            <Info className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                        <Input
+                                          type="number"
+                                          value={7}
+                                          disabled
+                                          className="h-8 text-sm bg-muted"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       );
@@ -1412,6 +1455,45 @@ export function WorkoutLog() {
             );
           })}
         </div>
+
+        {/* ✅ NEW: RPE Information Modal */}
+        <Dialog open={rpeInfoModal} onOpenChange={setRpeInfoModal}>
+          <DialogContent className="max-w-sm sm:max-w-md mx-4">
+            <DialogHeader>
+              <DialogTitle className="text-lg">What is RPE?</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                <strong>RPE (Rate of Perceived Exertion)</strong> is a scale from 1-10 that measures how difficult a set feels:
+              </p>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span>RPE 6:</span>
+                  <span>4+ reps left in tank</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RPE 7:</span>
+                  <span>3 reps left in tank</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RPE 8:</span>
+                  <span>2 reps left in tank</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RPE 9:</span>
+                  <span>1 rep left in tank</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RPE 10:</span>
+                  <span>Maximum effort, no reps left</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Week 1 targets RPE 7 for all sets to establish baseline performance.
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* MPC Feedback Modal */}
         <Dialog open={feedbackModal.isOpen} onOpenChange={(open) => setFeedbackModal(prev => ({ ...prev, isOpen: open }))}>
