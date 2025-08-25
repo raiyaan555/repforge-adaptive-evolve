@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, Plus, Minus, Info } from 'lucide-react';
+import { ChevronLeft, Plus, Minus, Info, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -31,8 +31,10 @@ interface WorkoutLog {
   muscleGroup: string;
   plannedSets: number;
   plannedReps: number;
+  expectedReps: number[]; // ✅ NEW: Track expected reps for each set based on RPE target
   actualReps: number[];
   weights: number[];
+  prefilledWeights: number[]; // ✅ NEW: Track prefilled weights to detect manual changes
   rpe: number[];
   completed: boolean;
   currentSets: number;
@@ -87,6 +89,16 @@ export function WorkoutLog() {
   // ✅ NEW: RPE Info Modal
   const [rpeInfoModal, setRpeInfoModal] = useState(false);
 
+  // ✅ NEW: Weight Change Confirmation Modal (Week 2+ only)
+  const [weightChangeModal, setWeightChangeModal] = useState<{
+    isOpen: boolean;
+    exerciseIndex: number;
+    setIndex: number;
+    originalWeight: number;
+    newWeight: number;
+    resolve: (keepOriginal: boolean) => void;
+  }>({ isOpen: false, exerciseIndex: -1, setIndex: -1, originalWeight: 0, newWeight: 0, resolve: () => {} });
+
   // ✅ NEW: Function to get target RPE based on week and set position
   const getTargetRPE = (week: number, setIndex: number, totalSets: number) => {
     if (week === 1) return 7;
@@ -105,6 +117,17 @@ export function WorkoutLog() {
     }
     
     return 7; // fallback
+  };
+
+  // ✅ NEW: Function to calculate expected reps based on RPE
+  const getExpectedRepsForRPE = (targetRPE: number, baseReps: number) => {
+    // This is a simplified model - in reality this would be more complex
+    // Higher RPE typically means fewer reps possible
+    if (targetRPE <= 7) return baseReps;
+    if (targetRPE === 8) return Math.max(baseReps - 1, 1);
+    if (targetRPE === 9) return Math.max(baseReps - 2, 1);
+    if (targetRPE === 10) return Math.max(baseReps - 3, 1);
+    return baseReps;
   };
 
   // ✅ NEW: Input validation helpers
@@ -142,8 +165,14 @@ export function WorkoutLog() {
     correctedExercise.weights = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.weights[i] || 0
     );
+    correctedExercise.prefilledWeights = Array.from({ length: targetLength }, (_, i) => 
+      correctedExercise.prefilledWeights[i] || 0
+    );
     correctedExercise.rpe = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.rpe[i] || getTargetRPE(currentWeek, i, targetLength)
+    );
+    correctedExercise.expectedReps = Array.from({ length: targetLength }, (_, i) => 
+      correctedExercise.expectedReps[i] || correctedExercise.plannedReps
     );
     
     return correctedExercise;
@@ -419,7 +448,7 @@ export function WorkoutLog() {
       // Get all previous occurrences of this exact exercise, sorted by most recent first
       const { data: exerciseHistory, error } = await supabase
         .from('mesocycle')
-        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number')
+        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps, expected_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
         .eq('exercise_name', exerciseName)
@@ -480,7 +509,32 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ COMPLETELY REWRITTEN: Enhanced function with proper same-exercise progression
+  // ✅ NEW: Function to calculate next week's reps based on performance
+  const calculateNextWeekReps = (actualReps: number, expectedReps: number, currentWeekRPE: number, nextWeekRPE: number) => {
+    console.log(`🔍 DEBUG - Rep calculation: actual=${actualReps}, expected=${expectedReps}, currentRPE=${currentWeekRPE}, nextRPE=${nextWeekRPE}`);
+    
+    if (actualReps < expectedReps) {
+      // User performed worse than expected
+      if (nextWeekRPE === currentWeekRPE) {
+        // Same RPE next week → decrease by 1
+        return Math.max(1, actualReps - 1);
+      } else {
+        // Higher RPE next week → keep same
+        return actualReps;
+      }
+    } else {
+      // User performed as expected or better
+      if (nextWeekRPE === currentWeekRPE) {
+        // Same RPE → same reps
+        return actualReps;
+      } else {
+        // Higher RPE → +1 rep
+        return actualReps + 1;
+      }
+    }
+  };
+
+  // ✅ COMPLETELY REWRITTEN: Enhanced function with proper same-exercise progression and Week 1 Day 2+ soreness
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     try {
       const structure = workoutData?.workout_structure as WorkoutStructure;
@@ -525,8 +579,10 @@ export function WorkoutLog() {
             muscleGroup: mg.muscleGroup,
             plannedSets: defaultSets,
             plannedReps: defaultReps,
+            expectedReps: Array(defaultSets).fill(defaultReps),
             actualReps: Array(defaultSets).fill(0),
             weights: Array(defaultSets).fill(0),
+            prefilledWeights: Array(defaultSets).fill(0),
             rpe: Array(defaultSets).fill(getTargetRPE(actualWeek, 0, defaultSets)),
             completed: false,
             currentSets: defaultSets,
@@ -546,18 +602,17 @@ export function WorkoutLog() {
       console.log('🔍 DEBUG - Unique muscle groups for today:', muscleGroups);
       console.log('🔍 DEBUG - Actual week before SC check:', actualWeek);
       
-      // ✅ FIXED: Sequential SC prompting for multiple muscle groups using actual week
+      // ✅ FIXED: Start soreness checking from Week 1 Day 2+
       const scGroupsToAsk: string[] = [];
       
       for (const mg of muscleGroups) {
-        let shouldAsk = actualWeek >= 2;
-        console.log(`🔍 DEBUG - ${mg}: actualWeek (${actualWeek}) >= 2? ${shouldAsk}`);
+        let shouldAsk = false;
         
-        if (!shouldAsk && actualWeek === 1) {
-          // Check if this muscle group was trained earlier in the same week
-          console.log(`🔍 DEBUG - Checking previous sessions for ${mg} in week ${actualWeek}, day < ${actualDay}`);
+        if (actualWeek === 1 && actualDay >= 2) {
+          // Week 1, Day 2+ → check if muscle group was trained in previous days of same week
+          console.log(`🔍 DEBUG - Week 1, Day ${actualDay}: Checking previous days for ${mg}`);
           try {
-            const { data: sameWeek } = await supabase
+            const { data: sameWeekPrevDays } = await supabase
               .from('mesocycle')
               .select('id, day_number')
               .eq('user_id', user.id)
@@ -566,8 +621,26 @@ export function WorkoutLog() {
               .eq('muscle_group', mg)
               .lt('day_number', actualDay);
             
-            console.log(`🔍 DEBUG - Found ${(sameWeek || []).length} previous sessions for ${mg}:`, sameWeek);
-            shouldAsk = (sameWeek || []).length > 0;
+            console.log(`🔍 DEBUG - Found ${(sameWeekPrevDays || []).length} previous same-week sessions for ${mg}:`, sameWeekPrevDays);
+            shouldAsk = (sameWeekPrevDays || []).length > 0;
+          } catch (error) {
+            console.error('🔍 DEBUG - Error checking same week previous days:', error);
+            shouldAsk = false;
+          }
+        } else if (actualWeek >= 2) {
+          // Week 2+ → check if muscle group was trained in any previous days
+          console.log(`🔍 DEBUG - Week ${actualWeek}: Checking any previous training for ${mg}`);
+          try {
+            const { data: anyPrevious } = await supabase
+              .from('mesocycle')
+              .select('id, week_number, day_number')
+              .eq('user_id', user.id)
+              .eq('plan_id', workoutId)
+              .eq('muscle_group', mg)
+              .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`);
+            
+            console.log(`🔍 DEBUG - Found ${(anyPrevious || []).length} previous sessions for ${mg}:`, anyPrevious);
+            shouldAsk = (anyPrevious || []).length > 0;
           } catch (error) {
             console.error('🔍 DEBUG - Error checking previous sessions:', error);
             shouldAsk = false;
@@ -581,7 +654,7 @@ export function WorkoutLog() {
           console.log(`🔍 DEBUG - ❌ SKIPPED ${mg} - shouldAsk = false`);
         }
         
-        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${actualWeek})`);
+        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${actualWeek}, day=${actualDay})`);
       }
 
       console.log('🔍 DEBUG - Final scGroupsToAsk array:', scGroupsToAsk);
@@ -693,7 +766,9 @@ export function WorkoutLog() {
           if (actualWeek === 1) {
             console.log(`🔍 DEBUG - Week 1: ${log.exercise} - No prefills, starting empty`);
             newLog.weights = Array(newLog.currentSets).fill(0);
+            newLog.prefilledWeights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
+            newLog.expectedReps = Array(newLog.currentSets).fill(newLog.plannedReps);
             newLog.rpe = Array(newLog.currentSets).fill(7);
             updatedLogs.push(ensureArrayIntegrity(newLog));
             continue;
@@ -738,20 +813,37 @@ export function WorkoutLog() {
                 const weight = Number(prevWeights[i] || prevWeights[0] || 0);
                 return Math.max(0, weight);
               });
+              newLog.prefilledWeights = [...newLog.weights]; // ✅ NEW: Store prefilled weights
               console.log(`🔍 DEBUG - ✅ PREFILLED weights for ${log.exercise}:`, newLog.weights);
             } else {
               // Fallback: try to extract from other formats or use defaults
               const fallbackWeight = Number(prevWeights) || 0;
               newLog.weights = Array(newLog.currentSets).fill(Math.max(0, fallbackWeight));
+              newLog.prefilledWeights = [...newLog.weights]; // ✅ NEW: Store prefilled weights
               console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // ✅ ENHANCED: ALWAYS prefill reps using best set performance + progression
+            // ✅ ENHANCED: Calculate reps based on performance analysis
             if (!isDeloadWeek) {
-              const { bestReps, averageRpe } = getBestSetMetrics(recentExercise.actual_reps, recentExercise.rpe);
-              const repIncrease = averageRpe <= 8 ? 1 : 0; // Only increase if average RPE was 8 or less
-              newLog.plannedReps = Math.max(1, bestReps + repIncrease);
-              console.log(`🔍 DEBUG - ✅ REP PROGRESSION: ${bestReps} + ${repIncrease} = ${newLog.plannedReps} (avgRPE: ${averageRpe.toFixed(1)})`);
+              const currentWeekRPEs = Array.from({ length: newLog.currentSets }, (_, i) => 
+                getTargetRPE(actualWeek, i, newLog.currentSets)
+              );
+              const prevWeekRPEs = recentExercise.rpe || [];
+              const prevActualReps = recentExercise.actual_reps || [];
+              const prevExpectedReps = recentExercise.expected_reps || recentExercise.planned_reps || [];
+              
+              newLog.plannedReps = newLog.plannedReps; // Keep template default
+              newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
+                const currentRPE = currentWeekRPEs[i];
+                const prevRPE = Number(prevWeekRPEs[i]) || 7;
+                const prevActual = Number(prevActualReps[i]) || newLog.plannedReps;
+                const prevExpected = Number(prevExpectedReps[i]) || prevActual;
+                
+                // ✅ NEW: Apply rep progression logic
+                return calculateNextWeekReps(prevActual, prevExpected, prevRPE, currentRPE);
+              });
+              
+              console.log(`🔍 DEBUG - ✅ REP PROGRESSION for ${log.exercise}:`, newLog.expectedReps);
             }
 
             // Initialize tracking arrays with target RPEs
@@ -775,7 +867,9 @@ export function WorkoutLog() {
             
             // For week 2+, still start with empty values for new exercises
             newLog.weights = Array(newLog.currentSets).fill(0);
+            newLog.prefilledWeights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
+            newLog.expectedReps = Array(newLog.currentSets).fill(newLog.plannedReps);
             newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
               getTargetRPE(actualWeek, i, newLog.currentSets)
             );
@@ -785,7 +879,7 @@ export function WorkoutLog() {
           // ✅ NEW: Final validation to ensure data integrity
           newLog = ensureArrayIntegrity(newLog);
           
-          console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, ${newLog.plannedReps} reps`);
+          console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, expected reps:`, newLog.expectedReps);
           updatedLogs.push(newLog);
         } catch (error) {
           console.error(`🔍 DEBUG - Error processing exercise ${log.exercise}:`, error);
@@ -833,8 +927,10 @@ export function WorkoutLog() {
                   targetExercise.actualReps.push(0);
                   const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
                   targetExercise.weights.push(Number(lastWeight) || 0);
+                  targetExercise.prefilledWeights.push(Number(lastWeight) || 0);
                   const newSetIndex = targetExercise.rpe.length;
                   targetExercise.rpe.push(getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets));
+                  targetExercise.expectedReps.push(targetExercise.plannedReps);
                 }
                 
                 // Ensure integrity
@@ -856,7 +952,9 @@ export function WorkoutLog() {
                 // Resize arrays safely
                 targetExercise.actualReps = targetExercise.actualReps.slice(0, newSets);
                 targetExercise.weights = targetExercise.weights.slice(0, newSets);
+                targetExercise.prefilledWeights = targetExercise.prefilledWeights.slice(0, newSets);
                 targetExercise.rpe = targetExercise.rpe.slice(0, newSets);
+                targetExercise.expectedReps = targetExercise.expectedReps.slice(0, newSets);
                 
                 // Ensure minimum array lengths
                 ensureArrayIntegrity(targetExercise);
@@ -880,6 +978,37 @@ export function WorkoutLog() {
     }
   };
 
+  // ✅ NEW: Function to handle weight change confirmation (Week 2+ only)
+  const handleWeightChange = async (exerciseIndex: number, setIndex: number, newWeight: number) => {
+    const exercise = workoutLogs[exerciseIndex];
+    const originalWeight = exercise?.prefilledWeights?.[setIndex] || 0;
+    
+    // ✅ NEW: Only show dialog for Week 2+ and when there's a significant change from prefilled weight
+    if (currentWeek >= 2 && originalWeight > 0 && Math.abs(newWeight - originalWeight) > 0.1) {
+      return new Promise<void>((resolve) => {
+        setWeightChangeModal({
+          isOpen: true,
+          exerciseIndex,
+          setIndex,
+          originalWeight,
+          newWeight,
+          resolve: (keepOriginal) => {
+            if (keepOriginal) {
+              updateSetData(exerciseIndex, setIndex, 'weight', originalWeight);
+            } else {
+              updateSetData(exerciseIndex, setIndex, 'weight', newWeight);
+            }
+            setWeightChangeModal(prev => ({ ...prev, isOpen: false }));
+            resolve();
+          }
+        });
+      });
+    } else {
+      // Week 1 or no significant change - update normally
+      updateSetData(exerciseIndex, setIndex, 'weight', newWeight);
+    }
+  };
+
   // ✅ ENHANCED: Comprehensive input validation and error handling
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
     setWorkoutLogs(prevLogs => {
@@ -898,7 +1027,9 @@ export function WorkoutLog() {
         // Ensure arrays are properly sized
         exercise.actualReps = exercise.actualReps || [];
         exercise.weights = exercise.weights || [];
+        exercise.prefilledWeights = exercise.prefilledWeights || [];
         exercise.rpe = exercise.rpe || [];
+        exercise.expectedReps = exercise.expectedReps || [];
         
         while (exercise.actualReps.length < exercise.currentSets) {
           exercise.actualReps.push(0);
@@ -906,8 +1037,14 @@ export function WorkoutLog() {
         while (exercise.weights.length < exercise.currentSets) {
           exercise.weights.push(0);
         }
+        while (exercise.prefilledWeights.length < exercise.currentSets) {
+          exercise.prefilledWeights.push(0);
+        }
         while (exercise.rpe.length < exercise.currentSets) {
           exercise.rpe.push(getTargetRPE(currentWeek, exercise.rpe.length, exercise.currentSets));
+        }
+        while (exercise.expectedReps.length < exercise.currentSets) {
+          exercise.expectedReps.push(exercise.plannedReps);
         }
         
         // Update the specific field
@@ -943,8 +1080,10 @@ export function WorkoutLog() {
         exercise.currentSets++;
         exercise.actualReps.push(0);
         exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
+        exercise.prefilledWeights.push(exercise.prefilledWeights[exercise.prefilledWeights.length - 1] || 0);
         const newSetIndex = exercise.rpe.length;
         exercise.rpe.push(getTargetRPE(currentWeek, newSetIndex, exercise.currentSets));
+        exercise.expectedReps.push(exercise.plannedReps);
         exercise.completed = false;
         
         return updatedLogs;
@@ -970,7 +1109,9 @@ export function WorkoutLog() {
         exercise.currentSets--;
         exercise.actualReps.pop();
         exercise.weights.pop();
+        exercise.prefilledWeights.pop();
         exercise.rpe.pop();
+        exercise.expectedReps.pop();
         exercise.completed = false;
         
         return updatedLogs;
@@ -1084,6 +1225,7 @@ export function WorkoutLog() {
             muscle_group: exercise.muscleGroup,
             planned_sets: exercise.plannedSets,
             planned_reps: exercise.plannedReps,
+            expected_reps: exercise.expectedReps, // ✅ NEW: Save expected reps for future reference
             actual_sets: exercise.currentSets,
             actual_reps: exercise.actualReps,
             weight_used: exercise.weights,
@@ -1355,6 +1497,7 @@ export function WorkoutLog() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                             {Array.from({ length: exercise.currentSets }).map((_, setIndex) => {
                               const targetRPE = getTargetRPE(currentWeek, setIndex, exercise.currentSets);
+                              const expectedReps = exercise.expectedReps?.[setIndex] || exercise.plannedReps;
                               
                               return (
                                 <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
@@ -1369,6 +1512,14 @@ export function WorkoutLog() {
                                       </Badge>
                                     )}
                                   </div>
+                                  
+                                  {/* ✅ NEW: Expected Reps Indicator for Week 2+ */}
+                                  {currentWeek > 1 && expectedReps !== exercise.plannedReps && (
+                                    <div className="text-xs text-muted-foreground mb-2">
+                                      Expected: {expectedReps} reps
+                                    </div>
+                                  )}
+                                  
                                   <div className="space-y-2">
                                     <div>
                                       <Label className="text-xs text-muted-foreground">
@@ -1378,9 +1529,9 @@ export function WorkoutLog() {
                                         type="number"
                                         value={exercise.weights?.[setIndex] || ''}
                                         placeholder={currentWeek === 1 ? "" : "Previous weight"}
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                           const value = validateNumericInput(e.target.value, 'weight');
-                                          updateSetData(originalIndex, setIndex, 'weight', value);
+                                          await handleWeightChange(originalIndex, setIndex, value);
                                         }}
                                         className="h-8 text-sm"
                                         min="0"
@@ -1401,7 +1552,7 @@ export function WorkoutLog() {
                                       <Input
                                         type="number"
                                         value={exercise.actualReps?.[setIndex] || ''}
-                                        placeholder={currentWeek === 1 ? String(exercise.plannedReps || '') : "Target reps"}
+                                        placeholder={currentWeek === 1 ? String(exercise.plannedReps || '') : String(expectedReps)}
                                         onChange={(e) => {
                                           const value = validateNumericInput(e.target.value, 'reps');
                                           updateSetData(originalIndex, setIndex, 'reps', value);
@@ -1455,6 +1606,39 @@ export function WorkoutLog() {
             );
           })}
         </div>
+
+        {/* ✅ NEW: Weight Change Confirmation Modal (Week 2+ only) */}
+        <Dialog open={weightChangeModal.isOpen} onOpenChange={() => {}}>
+          <DialogContent className="max-w-sm sm:max-w-md mx-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-lg">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Weight Change Detected
+              </DialogTitle>
+              <DialogDescription className="text-sm">
+                For best results, keep the same weight as last time ({weightChangeModal.originalWeight} {weightUnit}).
+                <br />
+                <br />
+                Change weight anyway?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => weightChangeModal.resolve(true)}
+                className="flex-1"
+              >
+                Keep Same Weight
+              </Button>
+              <Button
+                onClick={() => weightChangeModal.resolve(false)}
+                className="flex-1"
+              >
+                Change Weight
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* ✅ NEW: RPE Information Modal */}
         <Dialog open={rpeInfoModal} onOpenChange={setRpeInfoModal}>
