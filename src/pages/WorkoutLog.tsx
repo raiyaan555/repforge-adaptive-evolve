@@ -440,15 +440,15 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ COMPLETELY REWRITTEN: New function to get MOST RECENT occurrence of same exercise
+  // ✅ FIXED: Remove expected_reps from database query since it doesn't exist
   const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number) => {
     try {
       console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup})`);
       
-      // Get all previous occurrences of this exact exercise, sorted by most recent first
+      // ✅ FIXED: Remove 'expected_reps' from select since it doesn't exist in database
       const { data: exerciseHistory, error } = await supabase
         .from('mesocycle')
-        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps, expected_reps')
+        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
         .eq('exercise_name', exerciseName)
@@ -458,7 +458,17 @@ export function WorkoutLog() {
         .order('day_number', { ascending: false })
         .limit(1);
         
-      if (error) throw error;
+      console.log('🔍 DEBUG - Query executed:', { data: exerciseHistory, error });
+        
+      if (error) {
+        console.error('🔍 DEBUG - Query error details:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
+        throw error;
+      }
       
       const mostRecent = exerciseHistory?.[0];
       console.log(`🔍 DEBUG - Most recent data for ${exerciseName}:`, mostRecent);
@@ -509,28 +519,17 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ NEW: Function to calculate next week's reps based on performance
-  const calculateNextWeekReps = (actualReps: number, expectedReps: number, currentWeekRPE: number, nextWeekRPE: number) => {
-    console.log(`🔍 DEBUG - Rep calculation: actual=${actualReps}, expected=${expectedReps}, currentRPE=${currentWeekRPE}, nextRPE=${nextWeekRPE}`);
+  // ✅ SIMPLIFIED: Calculate expected reps on the fly without stored values
+  const calculateNextWeekReps = (actualReps: number, currentWeekRPE: number, nextWeekRPE: number) => {
+    console.log(`🔍 DEBUG - Rep calculation: actual=${actualReps}, currentRPE=${currentWeekRPE}, nextRPE=${nextWeekRPE}`);
     
-    if (actualReps < expectedReps) {
-      // User performed worse than expected
-      if (nextWeekRPE === currentWeekRPE) {
-        // Same RPE next week → decrease by 1
-        return Math.max(1, actualReps - 1);
-      } else {
-        // Higher RPE next week → keep same
-        return actualReps;
-      }
+    const rpeIncrease = nextWeekRPE - currentWeekRPE;
+    if (rpeIncrease > 0) {
+      // Higher RPE this week - expect +1 rep
+      return actualReps + 1;
     } else {
-      // User performed as expected or better
-      if (nextWeekRPE === currentWeekRPE) {
-        // Same RPE → same reps
-        return actualReps;
-      } else {
-        // Higher RPE → +1 rep
-        return actualReps + 1;
-      }
+      // Same RPE - expect same reps
+      return actualReps;
     }
   };
 
@@ -823,24 +822,22 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // ✅ ENHANCED: Calculate reps based on performance analysis
+            // ✅ SIMPLIFIED: Calculate expected reps on-the-fly
             if (!isDeloadWeek) {
               const currentWeekRPEs = Array.from({ length: newLog.currentSets }, (_, i) => 
                 getTargetRPE(actualWeek, i, newLog.currentSets)
               );
               const prevWeekRPEs = recentExercise.rpe || [];
               const prevActualReps = recentExercise.actual_reps || [];
-              const prevExpectedReps = recentExercise.expected_reps || recentExercise.planned_reps || [];
               
               newLog.plannedReps = newLog.plannedReps; // Keep template default
               newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
                 const currentRPE = currentWeekRPEs[i];
                 const prevRPE = Number(prevWeekRPEs[i]) || 7;
                 const prevActual = Number(prevActualReps[i]) || newLog.plannedReps;
-                const prevExpected = Number(prevExpectedReps[i]) || prevActual;
                 
-                // ✅ NEW: Apply rep progression logic
-                return calculateNextWeekReps(prevActual, prevExpected, prevRPE, currentRPE);
+                // ✅ SIMPLIFIED: Calculate expected based on previous actual performance
+                return calculateNextWeekReps(prevActual, prevRPE, currentRPE);
               });
               
               console.log(`🔍 DEBUG - ✅ REP PROGRESSION for ${log.exercise}:`, newLog.expectedReps);
@@ -1225,7 +1222,7 @@ export function WorkoutLog() {
             muscle_group: exercise.muscleGroup,
             planned_sets: exercise.plannedSets,
             planned_reps: exercise.plannedReps,
-            expected_reps: exercise.expectedReps, // ✅ NEW: Save expected reps for future reference
+            // ✅ REMOVED: expected_reps: exercise.expectedReps,
             actual_sets: exercise.currentSets,
             actual_reps: exercise.actualReps,
             weight_used: exercise.weights,
