@@ -448,7 +448,7 @@ export function WorkoutLog() {
       // Get all previous occurrences of this exact exercise, sorted by most recent first
       const { data: exerciseHistory, error } = await supabase
         .from('mesocycle')
-        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps, expected_reps')
+        .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
         .eq('exercise_name', exerciseName)
@@ -830,7 +830,7 @@ export function WorkoutLog() {
               );
               const prevWeekRPEs = recentExercise.rpe || [];
               const prevActualReps = recentExercise.actual_reps || [];
-              const prevExpectedReps = recentExercise.expected_reps || recentExercise.planned_reps || [];
+              const prevExpectedReps = recentExercise.planned_reps || [];
               
               newLog.plannedReps = newLog.plannedReps; // Keep template default
               newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
@@ -1225,7 +1225,7 @@ export function WorkoutLog() {
             muscle_group: exercise.muscleGroup,
             planned_sets: exercise.plannedSets,
             planned_reps: exercise.plannedReps,
-            expected_reps: exercise.expectedReps, // ✅ NEW: Save expected reps for future reference
+            
             actual_sets: exercise.currentSets,
             actual_reps: exercise.actualReps,
             weight_used: exercise.weights,
