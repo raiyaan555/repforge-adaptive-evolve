@@ -121,9 +121,13 @@ export function WorkoutLog() {
 
   // ✅ NEW: Input validation helpers
   const validateNumericInput = (value: string, field: 'reps' | 'weight' | 'rpe'): number => {
+    console.log(`🔍 DEBUG - validateNumericInput called with value="${value}", field="${field}"`);
+    
     // Remove non-numeric characters except decimal point
     const cleanValue = value.replace(/[^0-9.]/g, '');
     const numValue = parseFloat(cleanValue);
+    
+    console.log(`🔍 DEBUG - cleanValue="${cleanValue}", numValue=${numValue}`);
     
     if (isNaN(numValue) || numValue < 0) {
       switch (field) {
@@ -134,13 +138,21 @@ export function WorkoutLog() {
     }
     
     // Apply field-specific constraints
+    let finalValue = numValue;
     switch (field) {
-      case 'rpe': return Math.min(Math.max(Math.round(numValue), 1), 10);
-      case 'reps': return Math.min(Math.max(Math.round(numValue), 1), 100);
-      case 'weight': return Math.min(Math.max(numValue, 0), 999);
+      case 'rpe': 
+        finalValue = Math.min(Math.max(Math.round(numValue), 1), 10);
+        break;
+      case 'reps': 
+        finalValue = Math.min(Math.max(Math.round(numValue), 1), 100);
+        break;
+      case 'weight': 
+        finalValue = Math.min(Math.max(numValue, 0), 999);
+        break;
     }
     
-    return numValue;
+    console.log(`🔍 DEBUG - validateNumericInput returning: ${finalValue}`);
+    return finalValue;
   };
 
   const ensureArrayIntegrity = (exercise: WorkoutLog): WorkoutLog => {
@@ -1065,53 +1077,77 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ ENHANCED: Comprehensive input validation and error handling
+  // ✅ DEBUGGED: Comprehensive input validation and error handling with detailed logging
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
+    console.log(`🔍 DEBUG - updateSetData called: exerciseIndex=${exerciseIndex}, setIndex=${setIndex}, field="${field}", value=${value}`);
+    
     setWorkoutLogs(prevLogs => {
       try {
+        // Create deep copy to avoid mutations
         const updatedLogs = [...prevLogs];
-        const exercise = updatedLogs[exerciseIndex];
+        const exerciseCopy = { ...updatedLogs[exerciseIndex] };
         
-        if (!exercise || setIndex < 0 || setIndex >= exercise.currentSets) {
+        if (!exerciseCopy || setIndex < 0 || setIndex >= exerciseCopy.currentSets) {
           console.warn(`🔍 DEBUG - Invalid indices: exercise=${exerciseIndex}, set=${setIndex}`);
           return prevLogs;
         }
         
+        console.log(`🔍 DEBUG - BEFORE UPDATE for ${exerciseCopy.exercise}:`);
+        console.log(`🔍 DEBUG - actualReps:`, [...exerciseCopy.actualReps]);
+        console.log(`🔍 DEBUG - weights:`, [...exerciseCopy.weights]);
+        console.log(`🔍 DEBUG - rpe:`, [...exerciseCopy.rpe]);
+        console.log(`🔍 DEBUG - expectedReps:`, [...exerciseCopy.expectedReps]);
+        
         // Validate and sanitize input
         const validatedValue = validateNumericInput(String(value), field);
+        console.log(`🔍 DEBUG - Validated value: ${validatedValue}`);
+        
+        // ✅ CRITICAL FIX: Create new arrays instead of mutating
+        exerciseCopy.actualReps = [...(exerciseCopy.actualReps || [])];
+        exerciseCopy.weights = [...(exerciseCopy.weights || [])];
+        exerciseCopy.prefilledWeights = [...(exerciseCopy.prefilledWeights || [])];
+        exerciseCopy.rpe = [...(exerciseCopy.rpe || [])];
+        exerciseCopy.expectedReps = [...(exerciseCopy.expectedReps || [])];
         
         // Ensure arrays are properly sized
-        exercise.actualReps = exercise.actualReps || [];
-        exercise.weights = exercise.weights || [];
-        exercise.prefilledWeights = exercise.prefilledWeights || [];
-        exercise.rpe = exercise.rpe || [];
-        exercise.expectedReps = exercise.expectedReps || [];
-        
-        while (exercise.actualReps.length < exercise.currentSets) {
-          exercise.actualReps.push(0);
+        while (exerciseCopy.actualReps.length < exerciseCopy.currentSets) {
+          exerciseCopy.actualReps.push(0);
         }
-        while (exercise.weights.length < exercise.currentSets) {
-          exercise.weights.push(0);
+        while (exerciseCopy.weights.length < exerciseCopy.currentSets) {
+          exerciseCopy.weights.push(0);
         }
-        while (exercise.prefilledWeights.length < exercise.currentSets) {
-          exercise.prefilledWeights.push(0);
+        while (exerciseCopy.prefilledWeights.length < exerciseCopy.currentSets) {
+          exerciseCopy.prefilledWeights.push(0);
         }
-        while (exercise.rpe.length < exercise.currentSets) {
-          exercise.rpe.push(getTargetRPE(currentWeek, exercise.rpe.length, exercise.currentSets));
+        while (exerciseCopy.rpe.length < exerciseCopy.currentSets) {
+          exerciseCopy.rpe.push(getTargetRPE(currentWeek, exerciseCopy.rpe.length, exerciseCopy.currentSets));
         }
-        while (exercise.expectedReps.length < exercise.currentSets) {
-          exercise.expectedReps.push(exercise.plannedReps);
+        while (exerciseCopy.expectedReps.length < exerciseCopy.currentSets) {
+          exerciseCopy.expectedReps.push(exerciseCopy.plannedReps);
         }
         
-        // Update the specific field
-        if (field === 'reps') exercise.actualReps[setIndex] = validatedValue;
-        else if (field === 'weight') exercise.weights[setIndex] = validatedValue;
-        else if (field === 'rpe') exercise.rpe[setIndex] = validatedValue;
+        // Update the specific field in the NEW arrays
+        if (field === 'reps') {
+          exerciseCopy.actualReps[setIndex] = validatedValue;
+        } else if (field === 'weight') {
+          exerciseCopy.weights[setIndex] = validatedValue;
+        } else if (field === 'rpe') {
+          exerciseCopy.rpe[setIndex] = validatedValue;
+        }
         
         // Update completion status
-        exercise.completed = isExerciseCompleted(exercise);
+        exerciseCopy.completed = isExerciseCompleted(exerciseCopy);
         
-        console.log(`🔍 DEBUG - Updated ${exercise.exercise} set ${setIndex + 1} ${field}: ${validatedValue}`);
+        // Replace the exercise object in the copied logs array
+        updatedLogs[exerciseIndex] = exerciseCopy;
+        
+        console.log(`🔍 DEBUG - AFTER UPDATE for ${exerciseCopy.exercise}:`);
+        console.log(`🔍 DEBUG - actualReps:`, [...exerciseCopy.actualReps]);
+        console.log(`🔍 DEBUG - weights:`, [...exerciseCopy.weights]);
+        console.log(`🔍 DEBUG - rpe:`, [...exerciseCopy.rpe]);
+        console.log(`🔍 DEBUG - expectedReps:`, [...exerciseCopy.expectedReps]);
+        console.log(`🔍 DEBUG - Updated field "${field}" at index ${setIndex} to value: ${validatedValue}`);
+        
         return updatedLogs;
         
       } catch (error) {
@@ -1590,8 +1626,10 @@ export function WorkoutLog() {
                                       <Input
                                         type="number"
                                         value={exercise.weights?.[setIndex] || ''}
+                                        autoComplete="off"
                                         placeholder={currentWeek === 1 ? "" : "Previous weight"}
                                         onChange={async (e) => {
+                                          console.log(`🔍 DEBUG - Weight input onChange: "${e.target.value}"`);
                                           const value = validateNumericInput(e.target.value, 'weight');
                                           await handleWeightChange(originalIndex, setIndex, value);
                                         }}
@@ -1621,8 +1659,10 @@ export function WorkoutLog() {
                                       <Input
                                         type="number"
                                         value={exercise.actualReps?.[setIndex] || ''}
+                                        autoComplete="off"
                                         placeholder={String(expectedReps)}
                                         onChange={(e) => {
+                                          console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
                                           const value = validateNumericInput(e.target.value, 'reps');
                                           updateSetData(originalIndex, setIndex, 'reps', value);
                                         }}
