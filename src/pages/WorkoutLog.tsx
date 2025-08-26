@@ -535,6 +535,53 @@ export function WorkoutLog() {
     return finalReps;
   };
 
+  // ✅ NEW: Function to find best set in current exercise for new set calculation
+  const findBestSetInExercise = (exercise: WorkoutLog): { reps: number; rpe: number } => {
+    try {
+      const validSets = [];
+      
+      // Look at expected reps (which come from previous week's actual performance)
+      for (let i = 0; i < exercise.expectedReps.length; i++) {
+        const reps = exercise.expectedReps[i] || 0;
+        const rpe = exercise.rpe[i] || 7;
+        if (reps > 0) {
+          validSets.push({ reps, rpe });
+        }
+      }
+      
+      if (validSets.length === 0) {
+        return { reps: exercise.plannedReps, rpe: 7 };
+      }
+      
+      // Find best set (highest reps, or if tied, lowest RPE)
+      const bestSet = validSets.reduce((best, current) => {
+        if (current.reps > best.reps) return current;
+        if (current.reps === best.reps && current.rpe < best.rpe) return current;
+        return best;
+      });
+      
+      console.log(`🔍 DEBUG - Best set in ${exercise.exercise}: ${bestSet.reps} reps @ RPE ${bestSet.rpe}`);
+      return bestSet;
+    } catch (error) {
+      console.error('🔍 DEBUG - Error finding best set:', error);
+      return { reps: exercise.plannedReps, rpe: 7 };
+    }
+  };
+
+  // ✅ NEW: Function to calculate expected reps for a new set
+  const calculateNewSetExpectedReps = (exercise: WorkoutLog, newSetRPE: number): number => {
+    try {
+      const bestSet = findBestSetInExercise(exercise);
+      const expectedReps = calculateRepsFromRPEProgression(bestSet.reps, bestSet.rpe, newSetRPE);
+      
+      console.log(`🔍 DEBUG - New set calculation: Best set ${bestSet.reps}@RPE${bestSet.rpe} → ${expectedReps}@RPE${newSetRPE}`);
+      return expectedReps;
+    } catch (error) {
+      console.error('🔍 DEBUG - Error calculating new set expected reps:', error);
+      return exercise.plannedReps;
+    }
+  };
+
   // ✅ COMPLETELY REWRITTEN: Enhanced function with proper same-exercise progression and Week 1 Day 2+ soreness
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     try {
@@ -890,7 +937,7 @@ export function WorkoutLog() {
         }
       }
 
-      // ✅ NEW: Apply muscle group-based set adjustments with enhanced error handling
+      // ✅ FIXED: Apply muscle group-based set adjustments with PROPER RPE-based expected reps for new sets
       const isDeloadWeek = actualWeek === workoutData.duration_weeks;
       if (!isDeloadWeek && actualWeek >= 2) {
         for (const mg of muscleGroups) {
@@ -924,17 +971,22 @@ export function WorkoutLog() {
                 targetExercise.currentSets += adjustment;
                 targetExercise.plannedSets = targetExercise.currentSets;
                 
-                // Resize arrays safely - ✅ NEW SETS get proper RPE-based expected reps
+                // ✅ FIXED: Resize arrays safely with PROPER RPE-based expected reps for new sets
                 while (targetExercise.actualReps.length < targetExercise.currentSets) {
                   targetExercise.actualReps.push(0);
                   const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
                   targetExercise.weights.push(Number(lastWeight) || 0);
                   targetExercise.prefilledWeights.push(Number(lastWeight) || 0);
+                  
                   const newSetIndex = targetExercise.rpe.length;
                   const newSetRPE = getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets);
                   targetExercise.rpe.push(newSetRPE);
-                  // ✅ NEW SETS inherit template reps (will get RPE progression in future weeks)
-                  targetExercise.expectedReps.push(targetExercise.plannedReps);
+                  
+                  // ✅ CRITICAL FIX: Calculate expected reps based on best existing set + RPE progression
+                  const newSetExpectedReps = calculateNewSetExpectedReps(targetExercise, newSetRPE);
+                  targetExercise.expectedReps.push(newSetExpectedReps);
+                  
+                  console.log(`🔍 DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE}`);
                 }
                 
                 // Ensure integrity
@@ -1069,7 +1121,7 @@ export function WorkoutLog() {
     });
   };
 
-  // ✅ ENHANCED: Safe set management with validation and proper RPE assignment for new sets
+  // ✅ FIXED: Safe set management with validation and PROPER RPE-based expected reps for new sets
   const addSet = (exerciseIndex: number) => {
     setWorkoutLogs(prevLogs => {
       try {
@@ -1091,11 +1143,13 @@ export function WorkoutLog() {
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
-        // ✅ NEW SETS start with template reps (will get RPE progression in future weeks)
-        exercise.expectedReps.push(exercise.plannedReps);
+        // ✅ CRITICAL FIX: Calculate expected reps based on best existing set + RPE progression
+        const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
+        exercise.expectedReps.push(newSetExpectedReps);
+        
         exercise.completed = false;
         
-        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} to ${exercise.exercise}`);
+        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps to ${exercise.exercise}`);
         return updatedLogs;
       } catch (error) {
         console.error('🔍 DEBUG - Error adding set:', error);
