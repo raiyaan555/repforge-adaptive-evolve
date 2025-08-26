@@ -20,6 +20,7 @@ export type Database = {
           current_day: number
           current_week: number
           id: string
+          mesocycle_id: string
           started_at: string
           updated_at: string
           user_id: string
@@ -31,6 +32,7 @@ export type Database = {
           current_day?: number
           current_week?: number
           id?: string
+          mesocycle_id?: string
           started_at?: string
           updated_at?: string
           user_id: string
@@ -42,6 +44,7 @@ export type Database = {
           current_day?: number
           current_week?: number
           id?: string
+          mesocycle_id?: string
           started_at?: string
           updated_at?: string
           user_id?: string
@@ -259,6 +262,7 @@ export type Database = {
           feedback_given: boolean | null
           id: string
           is_sore: boolean | null
+          mesocycle_id: string | null
           muscle_group: string
           plan_id: string | null
           planned_reps: number
@@ -283,6 +287,7 @@ export type Database = {
           feedback_given?: boolean | null
           id?: string
           is_sore?: boolean | null
+          mesocycle_id?: string | null
           muscle_group: string
           plan_id?: string | null
           planned_reps: number
@@ -307,6 +312,7 @@ export type Database = {
           feedback_given?: boolean | null
           id?: string
           is_sore?: boolean | null
+          mesocycle_id?: string | null
           muscle_group?: string
           plan_id?: string | null
           planned_reps?: number
@@ -328,6 +334,7 @@ export type Database = {
           created_at: string
           healed: boolean
           id: string
+          mesocycle_id: string | null
           muscle_group: string
           soreness_level: string
           updated_at: string
@@ -338,6 +345,7 @@ export type Database = {
           created_at?: string
           healed?: boolean
           id?: string
+          mesocycle_id?: string | null
           muscle_group: string
           soreness_level: string
           updated_at?: string
@@ -348,6 +356,7 @@ export type Database = {
           created_at?: string
           healed?: boolean
           id?: string
+          mesocycle_id?: string | null
           muscle_group?: string
           soreness_level?: string
           updated_at?: string
@@ -474,6 +483,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          mesocycle_id: string | null
           muscle_group: string
           pump_level: string
           updated_at: string
@@ -483,6 +493,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          mesocycle_id?: string | null
           muscle_group: string
           pump_level: string
           updated_at?: string
@@ -492,6 +503,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          mesocycle_id?: string | null
           muscle_group?: string
           pump_level?: string
           updated_at?: string

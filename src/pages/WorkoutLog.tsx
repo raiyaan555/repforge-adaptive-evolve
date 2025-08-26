@@ -300,12 +300,17 @@ export function WorkoutLog() {
   const loadActiveWorkoutInfo = async () => {
     try {
       console.log('🔍 DEBUG - Querying active_workouts...');
-      const { data: activeWorkout } = await supabase
+      const { data: activeWorkout, error } = await supabase
         .from('active_workouts')
         .select('current_week, current_day, mesocycle_id') // ✅ NEW: Include mesocycle_id
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
         .maybeSingle();
+        
+      if (error) {
+        console.error('🔍 DEBUG - Database error loading active workout:', error);
+        return null;
+      }
         
       if (activeWorkout) {
         console.log('🔍 DEBUG - Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day, 'Mesocycle ID:', activeWorkout.mesocycle_id);
@@ -435,6 +440,12 @@ export function WorkoutLog() {
   const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number, mesocycleId: string) => {
     try {
       console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup}) on Day ${actualDay} in mesocycle ${mesocycleId}`);
+      
+      // Return null if no mesocycle_id to prevent cross-contamination
+      if (!mesocycleId) {
+        console.log('🔍 DEBUG - No mesocycle_id provided, returning null to start fresh');
+        return null;
+      }
       
       // ✅ PRIORITY 1: Look for same exercise on same day in previous weeks within SAME MESOCYCLE
       const { data: sameDayData, error: sameDayError } = await supabase
