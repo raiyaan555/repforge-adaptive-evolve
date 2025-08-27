@@ -57,7 +57,7 @@ export function WorkoutLog() {
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentDay, setCurrentDay] = useState(1);
-  const [currentMesocycleId, setCurrentMesocycleId] = useState<string>(''); // ✅ NEW: Track current mesocycle ID
+  const [currentMesocycleId, setCurrentMesocycleId] = useState<string>(''); // Track current mesocycle ID
   const [loading, setLoading] = useState(true);
 
   // MPC Feedback Modal
@@ -176,7 +176,7 @@ export function WorkoutLog() {
     return correctedExercise;
   };
 
-  // ✅ FIXED: Single useEffect with proper cleanup and mesocycle_id loading
+  // FIXED: Single useEffect with proper cleanup and mesocycle_id loading
   useEffect(() => {
     let isMounted = true;
     let isInitializing = false;
@@ -200,7 +200,7 @@ export function WorkoutLog() {
           return;
         }
         
-        // 2. Load active workout info (week/day/mesocycle_id) - ✅ NOW INCLUDES MESOCYCLE_ID
+        // 2. Load active workout info (week/day/mesocycle_id)
         console.log('🔍 DEBUG - Loading active workout info...');
         const activeInfo = await loadActiveWorkoutInfo();
         if (!isMounted) {
@@ -210,10 +210,10 @@ export function WorkoutLog() {
         
         const actualWeek = activeInfo?.current_week || 1;
         const actualDay = activeInfo?.current_day || 1;
-        const mesocycleId = activeInfo?.mesocycle_id || ''; // ✅ NEW: Get mesocycle ID
+        const mesocycleId = activeInfo?.mesocycle_id || '';
         
         console.log('🔍 DEBUG - Using actual week/day/mesocycle:', actualWeek, actualDay, mesocycleId);
-        setCurrentMesocycleId(mesocycleId); // ✅ NEW: Store mesocycle ID
+        setCurrentMesocycleId(mesocycleId);
         
         if (isMounted) {
           setLoading(false);
@@ -222,7 +222,7 @@ export function WorkoutLog() {
         
         // 3. Initialize workout logs with mesocycle ID
         console.log('🔍 DEBUG - Initializing workout logs...');
-        await initializeWorkoutLogs(workoutData, actualWeek, actualDay, mesocycleId); // ✅ NEW: Pass mesocycle ID
+        await initializeWorkoutLogs(workoutData, actualWeek, actualDay, mesocycleId);
         
         if (isMounted) {
           setCompletedMuscleGroups(new Set());
@@ -296,21 +296,16 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ UPDATED: Now loads mesocycle_id
+  // UPDATED: Now loads mesocycle_id
   const loadActiveWorkoutInfo = async () => {
     try {
       console.log('🔍 DEBUG - Querying active_workouts...');
-      const { data: activeWorkout, error } = await supabase
+      const { data: activeWorkout } = await supabase
         .from('active_workouts')
-        .select('current_week, current_day, mesocycle_id') // ✅ NEW: Include mesocycle_id
+        .select('current_week, current_day, mesocycle_id')
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
         .maybeSingle();
-        
-      if (error) {
-        console.error('🔍 DEBUG - Database error loading active workout:', error);
-        return null;
-      }
         
       if (activeWorkout) {
         console.log('🔍 DEBUG - Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day, 'Mesocycle ID:', activeWorkout.mesocycle_id);
@@ -374,7 +369,7 @@ export function WorkoutLog() {
     return results;
   }, []);
 
-  // ✅ UPDATED: Function to get weekly sets count per muscle group - NOW FILTERED BY MESOCYCLE_ID
+  // UPDATED: Function to get weekly sets count per muscle group - NOW FILTERED BY MESOCYCLE_ID
   const getWeeklySetsByMuscleGroup = async (muscleGroups: string[], actualWeek: number, mesocycleId: string) => {
     const weeklySetsByMuscleGroup: Record<string, number> = {};
     
@@ -385,13 +380,12 @@ export function WorkoutLog() {
         return weeklySetsByMuscleGroup;
       }
 
-      // ✅ NEW: Filter by mesocycle_id to isolate current cycle
       const { data: weeklyData, error } = await supabase
         .from('mesocycle')
         .select('muscle_group, actual_sets')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', mesocycleId)
         .eq('week_number', actualWeek)
         .in('muscle_group', muscleGroups);
         
@@ -436,24 +430,43 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ UPDATED: Enhanced to prioritize same exercise on same day + FILTERED BY MESOCYCLE_ID
+  // ✅ FIXED: Enhanced to prioritize PREVIOUS WEEK (actualWeek - 1) FIRST, then fall back
   const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number, mesocycleId: string) => {
     try {
       console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup}) on Day ${actualDay} in mesocycle ${mesocycleId}`);
       
-      // Return null if no mesocycle_id to prevent cross-contamination
-      if (!mesocycleId) {
-        console.log('🔍 DEBUG - No mesocycle_id provided, returning null to start fresh');
-        return null;
+      // ✅ PRIORITY 1: Look for data from PREVIOUS WEEK (actualWeek - 1) on same day
+      if (actualWeek > 1) {
+        const previousWeek = actualWeek - 1;
+        console.log(`🔍 DEBUG - Checking previous week ${previousWeek} for ${exerciseName}`);
+        
+        const { data: previousWeekData, error: prevWeekError } = await supabase
+          .from('mesocycle')
+          .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
+          .eq('user_id', user.id)
+          .eq('plan_id', workoutId)
+          .eq('mesocycle_id', mesocycleId)
+          .eq('exercise_name', exerciseName)
+          .eq('muscle_group', muscleGroup)
+          .eq('week_number', previousWeek)
+          .eq('day_number', actualDay)
+          .limit(1);
+        
+        if (!prevWeekError && previousWeekData && previousWeekData.length > 0) {
+          console.log(`🔍 DEBUG - ✅ Found exercise from PREVIOUS WEEK ${previousWeek} (preferred):`, previousWeekData[0]);
+          return previousWeekData[0];
+        } else {
+          console.log(`🔍 DEBUG - No data found from previous week ${previousWeek}`);
+        }
       }
       
-      // ✅ PRIORITY 1: Look for same exercise on same day in previous weeks within SAME MESOCYCLE
+      // ✅ PRIORITY 2: Look for same exercise on same day in any previous weeks within SAME MESOCYCLE
       const { data: sameDayData, error: sameDayError } = await supabase
         .from('mesocycle')
         .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', mesocycleId)
         .eq('exercise_name', exerciseName)
         .eq('muscle_group', muscleGroup)
         .eq('day_number', actualDay)
@@ -473,7 +486,7 @@ export function WorkoutLog() {
         .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', mesocycleId)
         .eq('exercise_name', exerciseName)
         .eq('muscle_group', muscleGroup)
         .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`)
@@ -589,7 +602,7 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation
+  // COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number, mesocycleId: string) => {
     try {
       const structure = workoutData?.workout_structure as WorkoutStructure;
@@ -657,7 +670,7 @@ export function WorkoutLog() {
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup).filter(Boolean)));
       console.log('🔍 DEBUG - Unique muscle groups for today:', muscleGroups);
       
-      // ✅ UPDATED: Soreness checking with mesocycle_id filtering
+      // UPDATED: Soreness checking with mesocycle_id filtering
       const scGroupsToAsk: string[] = [];
       
       for (const mg of muscleGroups) {
@@ -672,7 +685,7 @@ export function WorkoutLog() {
               .select('id, day_number')
               .eq('user_id', user.id)
               .eq('plan_id', workoutId)
-              .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+              .eq('mesocycle_id', mesocycleId)
               .eq('week_number', actualWeek)
               .eq('muscle_group', mg)
               .lt('day_number', actualDay);
@@ -692,7 +705,7 @@ export function WorkoutLog() {
               .select('id, week_number, day_number')
               .eq('user_id', user.id)
               .eq('plan_id', workoutId)
-              .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+              .eq('mesocycle_id', mesocycleId)
               .eq('muscle_group', mg)
               .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`);
             
@@ -726,7 +739,7 @@ export function WorkoutLog() {
         console.log('🔍 DEBUG - ❌ NO GROUPS TO ASK - scGroupsToAsk is empty (clean mesocycle start)');
       }
 
-      // ✅ UPDATED: Save SC results with mesocycle_id
+      // UPDATED: Save SC results with mesocycle_id
       for (const [mg, sc] of Object.entries(scResults)) {
         try {
           console.log(`🔍 DEBUG - Saving soreness result: ${mg} = ${sc} for mesocycle ${mesocycleId}`);
@@ -736,17 +749,17 @@ export function WorkoutLog() {
             muscle_group: mg,
             soreness_level: sc,
             healed: sc === 'none',
-            mesocycle_id: mesocycleId // ✅ NEW: Include mesocycle_id
+            mesocycle_id: mesocycleId
           });
         } catch (error) {
           console.error(`🔍 DEBUG - Failed to save soreness for ${mg}:`, error);
         }
       }
 
-      // ✅ UPDATED: Get weekly sets count per muscle group with mesocycle_id
+      // UPDATED: Get weekly sets count per muscle group with mesocycle_id
       const weeklySetsByMuscleGroup = await getWeeklySetsByMuscleGroup(muscleGroups, actualWeek, mesocycleId);
 
-      // ✅ UPDATED: Get previous pump levels for muscle groups with mesocycle_id filtering
+      // UPDATED: Get previous pump levels for muscle groups with mesocycle_id filtering
       const pumpByGroup: Record<string, 'none'|'medium'|'amazing'> = {};
       if (actualWeek >= 2) {
         try {
@@ -754,7 +767,7 @@ export function WorkoutLog() {
             .from('pump_feedback')
             .select('muscle_group, pump_level')
             .eq('user_id', user.id)
-            .eq('mesocycle_id', mesocycleId) // ✅ NEW: Filter by mesocycle_id
+            .eq('mesocycle_id', mesocycleId)
             .order('workout_date', { ascending: false })
             .limit(50);
             
@@ -810,7 +823,7 @@ export function WorkoutLog() {
         }
       }
 
-      // ✅ UPDATED: Apply progression logic with mesocycle_id filtering
+      // UPDATED: Apply progression logic with mesocycle_id filtering
       const updatedLogs = [];
       for (const log of baseLogs) {
         try {
@@ -830,7 +843,7 @@ export function WorkoutLog() {
             continue;
           }
 
-          // ✅ ENHANCED: Get most recent occurrence within SAME MESOCYCLE
+          // ✅ ENHANCED: Get most recent occurrence within SAME MESOCYCLE (now prioritizes previous week)
           const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay, mesocycleId);
           console.log(`🔍 DEBUG - Recent data for ${log.exercise} in mesocycle ${mesocycleId}:`, recentExercise ? '✅ Found' : '❌ Not found');
           
@@ -889,7 +902,7 @@ export function WorkoutLog() {
                 
                 const expectedReps = calculateRepsFromRPEProgression(prevActual, prevRPE, currentRPE);
                 
-                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE}`);
+                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (from week ${recentExercise.week_number})`);
                 return expectedReps;
               });
               
@@ -1250,7 +1263,7 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ UPDATED: Save muscle group feedback with mesocycle_id
+  // UPDATED: Save muscle group feedback with mesocycle_id
   const saveMuscleGroupFeedback = async () => {
     try {
       const { muscleGroup, exercises } = feedbackModal;
@@ -1263,26 +1276,26 @@ export function WorkoutLog() {
       });
       setCompletedMuscleGroups(prev => new Set([...prev, muscleGroup]));
       
-      // ✅ UPDATED: Save pump feedback with mesocycle_id
+      // UPDATED: Save pump feedback with mesocycle_id
       try {
         await supabase.from('pump_feedback').insert({
           user_id: user.id,
           workout_date: new Date().toISOString().split('T')[0],
           muscle_group: muscleGroup,
           pump_level: feedback.pumpLevel,
-          mesocycle_id: currentMesocycleId // ✅ NEW: Include mesocycle_id
+          mesocycle_id: currentMesocycleId
         });
       } catch (error) {
         console.error('Failed to save pump feedback:', error);
       }
       
-      // ✅ UPDATED: Save all exercises with mesocycle_id
+      // UPDATED: Save all exercises with mesocycle_id
       for (const exercise of exercises) {
         try {
           await supabase.from('mesocycle').insert({
             user_id: user.id,
             plan_id: workoutId,
-            mesocycle_id: currentMesocycleId, // ✅ NEW: Include mesocycle_id
+            mesocycle_id: currentMesocycleId,
             workout_name: workout.name,
             week_number: currentWeek,
             day_number: currentDay,
@@ -1367,7 +1380,7 @@ export function WorkoutLog() {
         })
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId); // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', currentMesocycleId);
 
       if (nextWeek > workout.duration_weeks) {
         await saveCompletedMesocycle();
@@ -1397,7 +1410,7 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ UPDATED: Save completed mesocycle and clean up old data
+  // UPDATED: Save completed mesocycle and clean up old data
   const saveCompletedMesocycle = async () => {
     try {
       const { data: activeWorkout } = await supabase
@@ -1405,7 +1418,7 @@ export function WorkoutLog() {
         .select('*')
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId) // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', currentMesocycleId)
         .maybeSingle();
 
       if (!activeWorkout) return;
@@ -1415,7 +1428,7 @@ export function WorkoutLog() {
         .select('*')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId); // ✅ NEW: Filter by mesocycle_id
+        .eq('mesocycle_id', currentMesocycleId);
 
       await supabase
         .from('completed_mesocycles')
@@ -1430,14 +1443,13 @@ export function WorkoutLog() {
           mesocycle_data: {
             workouts: mesocycleData || [],
             workout_structure: workout.workout_structure,
-            mesocycle_id: currentMesocycleId // ✅ NEW: Store mesocycle_id
+            mesocycle_id: currentMesocycleId
           }
         });
 
-      // ✅ NEW: Clean up completed mesocycle data to prevent cross-contamination
+      // Clean up completed mesocycle data to prevent cross-contamination
       console.log(`🔍 DEBUG - Cleaning up completed mesocycle data for mesocycle_id: ${currentMesocycleId}`);
       
-      // Delete all data related to this completed mesocycle
       await Promise.all([
         supabase.from('mesocycle').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId),
         supabase.from('pump_feedback').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId),
@@ -1491,7 +1503,7 @@ export function WorkoutLog() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold">Day {currentDay} - Workout Log</h1>
               <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
-              {/* ✅ NEW: Show mesocycle ID for debugging */}
+              {/* Show mesocycle ID for debugging */}
               <p className="text-xs text-muted-foreground">Mesocycle: {currentMesocycleId.slice(0, 8)}...</p>
               {currentWeek === workout.duration_weeks && (
                 <Badge variant="secondary" className="mt-1">DELOAD WEEK</Badge>
