@@ -984,7 +984,7 @@ export function WorkoutLog() {
                 
                 // NEW: Pass expected reps to handle under-performance
                 const prevExpected = Array.isArray(prevExpectedReps) 
-                  ? Number(prevExpectedReps[i]) || prevExpected
+                  ? Number(prevExpectedReps[i]) || newLog.plannedReps
                   : Number(prevExpectedReps) || newLog.plannedReps;
                 
                 console.log(`💪 REP PROGRESSION DEBUG - Set ${i + 1} calculation inputs:`);
