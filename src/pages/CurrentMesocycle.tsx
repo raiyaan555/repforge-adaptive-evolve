@@ -113,6 +113,9 @@ export function CurrentMesocycle() {
     const dayKey = `day${dayNumber}`;
     const dayWorkout = structure[dayKey] || [];
     
+    console.log('🔍 DEBUG - Loading exercises for day:', dayNumber);
+    console.log('🔍 DEBUG - Day workout structure:', dayWorkout);
+    
     const exercises: any[] = [];
     if (Array.isArray(dayWorkout)) {
       dayWorkout.forEach((muscleGroup: any) => {
@@ -120,13 +123,17 @@ export function CurrentMesocycle() {
           muscleGroup.exercises.forEach((exercise: any) => {
             exercises.push({
               ...exercise,
-              muscleGroup: muscleGroup.muscleGroup
+              muscleGroup: muscleGroup.muscleGroup,
+              // Add default sets/reps for display
+              sets: exercise.sets || 2,
+              reps: exercise.reps || 8
             });
           });
         }
       });
     }
     
+    console.log('🔍 DEBUG - Parsed exercises:', exercises);
     setCurrentDayExercises(exercises);
   };
 
