@@ -545,15 +545,36 @@ export function WorkoutLog() {
     }
   };
 
-  // Proper RPE-based progression calculation
-  const calculateRepsFromRPEProgression = (previousReps: number, previousRPE: number, currentRPE: number): number => {
+  // UPDATED: Enhanced RPE-based progression calculation with under-performance handling
+  const calculateRepsFromRPEProgression = (
+    previousReps: number, 
+    previousRPE: number, 
+    currentRPE: number, 
+    expectedReps?: number
+  ): number => {
     console.log(`🔍 DEBUG - RPE Progression: ${previousReps} reps @ RPE ${previousRPE} → RPE ${currentRPE}`);
     
+    // Check if under-performed (actual < expected)
+    if (expectedReps && previousReps < expectedReps) {
+      console.log(`🔍 DEBUG - Under-performance detected: actual ${previousReps} < expected ${expectedReps}`);
+      
+      if (currentRPE >= previousRPE) {
+        // If RPE this week is higher or same as last week
+        console.log(`🔍 DEBUG - RPE same/higher (${currentRPE} >= ${previousRPE}): keeping same reps ${previousReps}`);
+        return Math.max(1, previousReps);
+      } else {
+        // If RPE this week is lower than last week
+        console.log(`🔍 DEBUG - RPE lower (${currentRPE} < ${previousRPE}): reducing reps by 1`);
+        return Math.max(1, previousReps - 1);
+      }
+    }
+    
+    // Normal progression: lastWeekReps + (thisWeekRPE - lastWeekRPE)
     const rpeDifference = currentRPE - previousRPE;
     const newReps = previousReps + rpeDifference;
     const finalReps = Math.max(1, newReps);
     
-    console.log(`🔍 DEBUG - Final calculation: ${previousReps} + (${currentRPE} - ${previousRPE}) = ${finalReps}`);
+    console.log(`🔍 DEBUG - Normal progression: ${previousReps} + (${currentRPE} - ${previousRPE}) = ${finalReps}`);
     return finalReps;
   };
 
@@ -588,17 +609,16 @@ export function WorkoutLog() {
     }
   };
 
-  // Function to calculate expected reps for a new set
+  // UPDATED: Function to calculate expected reps for a new set (empty for current week)
   const calculateNewSetExpectedReps = (exercise: WorkoutLog, newSetRPE: number): number => {
     try {
-      const bestSet = findBestSetInExercise(exercise);
-      const expectedReps = calculateRepsFromRPEProgression(bestSet.reps, bestSet.rpe, newSetRPE);
-      
-      console.log(`🔍 DEBUG - New set calculation: Best set ${bestSet.reps}@RPE${bestSet.rpe} → ${expectedReps}@RPE${newSetRPE}`);
-      return expectedReps;
+      // NEW: For new sets in current week, return 0 to keep empty
+      // User will manually enter reps for new sets in current week
+      console.log(`🔍 DEBUG - New set for current week: returning 0 (user will enter manually)`);
+      return 0;
     } catch (error) {
       console.error('🔍 DEBUG - Error calculating new set expected reps:', error);
-      return exercise.plannedReps;
+      return 0;
     }
   };
 
@@ -823,7 +843,7 @@ export function WorkoutLog() {
         }
       }
 
-      // UPDATED: Apply progression logic with mesocycle_id filtering
+      // UPDATED: Apply progression logic with mesocycle_id filtering and enhanced under-performance handling
       const updatedLogs = [];
       for (const log of baseLogs) {
         try {
@@ -886,13 +906,14 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // RPE-based rep progression calculation
+            // UPDATED: Enhanced RPE-based rep progression calculation with under-performance handling
             if (!isDeloadWeek) {
               const currentWeekRPEs = Array.from({ length: newLog.currentSets }, (_, i) => 
                 getTargetRPE(actualWeek, i, newLog.currentSets)
               );
               const prevWeekRPEs = recentExercise.rpe || [];
               const prevActualReps = recentExercise.actual_reps || [];
+              const prevExpectedReps = recentExercise.planned_reps; // This should be the expected/planned reps from previous session
               
               newLog.plannedReps = newLog.plannedReps;
               newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
@@ -900,13 +921,23 @@ export function WorkoutLog() {
                 const prevRPE = Number(prevWeekRPEs[i]) || 7;
                 const prevActual = Number(prevActualReps[i]) || newLog.plannedReps;
                 
-                const expectedReps = calculateRepsFromRPEProgression(prevActual, prevRPE, currentRPE);
+                // NEW: Pass expected reps to handle under-performance
+                const prevExpected = Array.isArray(prevExpectedReps) 
+                  ? Number(prevExpectedReps[i]) || prevExpected
+                  : Number(prevExpectedReps) || newLog.plannedReps;
                 
-                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (from week ${recentExercise.week_number})`);
+                const expectedReps = calculateRepsFromRPEProgression(
+                  prevActual, 
+                  prevRPE, 
+                  currentRPE,
+                  prevExpected  // NEW: Pass expected reps for under-performance detection
+                );
+                
+                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps (expected: ${prevExpected}) @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (from week ${recentExercise.week_number})`);
                 return expectedReps;
               });
               
-              console.log(`🔍 DEBUG - ✅ RPE-BASED REP PROGRESSION for ${log.exercise} in mesocycle ${mesocycleId}:`, newLog.expectedReps);
+              console.log(`🔍 DEBUG - ✅ ENHANCED RPE-BASED REP PROGRESSION for ${log.exercise} in mesocycle ${mesocycleId}:`, newLog.expectedReps);
             }
 
             newLog.actualReps = Array(newLog.currentSets).fill(0);
@@ -988,10 +1019,11 @@ export function WorkoutLog() {
                   const newSetRPE = getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets);
                   targetExercise.rpe.push(newSetRPE);
                   
+                  // NEW: For new sets, keep expected reps empty for current week
                   const newSetExpectedReps = calculateNewSetExpectedReps(targetExercise, newSetRPE);
                   targetExercise.expectedReps.push(newSetExpectedReps);
                   
-                  console.log(`🔍 DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE}`);
+                  console.log(`🔍 DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE} (empty for user input)`);
                 }
                 
                 ensureArrayIntegrity(targetExercise);
@@ -1025,7 +1057,7 @@ export function WorkoutLog() {
         }
       }
 
-      console.log('🔍 DEBUG - Final initialized logs with RPE-based progression and mesocycle isolation:', updatedLogs);
+      console.log('🔍 DEBUG - Final initialized logs with enhanced RPE-based progression and mesocycle isolation:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
@@ -1136,7 +1168,7 @@ export function WorkoutLog() {
     });
   };
 
-  // Safe set management with validation
+  // UPDATED: Safe set management with validation (new sets start empty for current week)
   const addSet = (exerciseIndex: number) => {
     setWorkoutLogs(prevLogs => {
       try {
@@ -1149,20 +1181,23 @@ export function WorkoutLog() {
         }
         
         exercise.currentSets++;
-        exercise.actualReps.push(0);
-        exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
-        exercise.prefilledWeights.push(exercise.prefilledWeights[exercise.prefilledWeights.length - 1] || 0);
+        exercise.actualReps.push(0); // NEW: Always start with 0 (user will enter)
+        
+        // NEW: For new sets, weights start empty (0) - user must enter
+        exercise.weights.push(0);
+        exercise.prefilledWeights.push(0);
         
         const newSetIndex = exercise.rpe.length;
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
+        // NEW: For new sets in current week, expected reps are empty (0)
         const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
         exercise.expectedReps.push(newSetExpectedReps);
         
         exercise.completed = false;
         
-        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps to ${exercise.exercise}`);
+        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps (empty for user) to ${exercise.exercise}`);
         return updatedLogs;
       } catch (error) {
         console.error('🔍 DEBUG - Error adding set:', error);
@@ -1599,7 +1634,8 @@ export function WorkoutLog() {
                                   </div>
                                   
                                   <div className="text-xs text-muted-foreground mb-2">
-                                    Expected: {expectedReps} reps
+                                    {/* NEW: Show different text for new sets with 0 expected reps */}
+                                    {expectedReps === 0 ? 'Enter your reps' : `Expected: ${expectedReps} reps`}
                                   </div>
                                   
                                   <div className="space-y-2">
@@ -1641,7 +1677,7 @@ export function WorkoutLog() {
                                         type="number"
                                         value={exercise.actualReps?.[setIndex] || ''}
                                         autoComplete="off"
-                                        placeholder={String(expectedReps)}
+                                        placeholder={expectedReps === 0 ? "" : String(expectedReps)}
                                         onChange={(e) => {
                                           console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
                                           const value = validateNumericInput(e.target.value, 'reps');
