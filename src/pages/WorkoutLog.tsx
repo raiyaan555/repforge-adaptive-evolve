@@ -602,7 +602,7 @@ export function WorkoutLog() {
     }
   };
 
-  // COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation
+  // COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation and FIXED RPE assignment
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number, mesocycleId: string) => {
     try {
       const structure = workoutData?.workout_structure as WorkoutStructure;
@@ -652,7 +652,7 @@ export function WorkoutLog() {
             actualReps: Array(defaultSets).fill(0),
             weights: Array(defaultSets).fill(0),
             prefilledWeights: Array(defaultSets).fill(0),
-            rpe: Array(defaultSets).fill(getTargetRPE(actualWeek, 0, defaultSets)),
+            rpe: Array(defaultSets).fill(7), // Will be recalculated after set adjustments
             completed: false,
             currentSets: defaultSets,
           });
@@ -886,33 +886,10 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // RPE-based rep progression calculation
-            if (!isDeloadWeek) {
-              const currentWeekRPEs = Array.from({ length: newLog.currentSets }, (_, i) => 
-                getTargetRPE(actualWeek, i, newLog.currentSets)
-              );
-              const prevWeekRPEs = recentExercise.rpe || [];
-              const prevActualReps = recentExercise.actual_reps || [];
-              
-              newLog.plannedReps = newLog.plannedReps;
-              newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
-                const currentRPE = currentWeekRPEs[i];
-                const prevRPE = Number(prevWeekRPEs[i]) || 7;
-                const prevActual = Number(prevActualReps[i]) || newLog.plannedReps;
-                
-                const expectedReps = calculateRepsFromRPEProgression(prevActual, prevRPE, currentRPE);
-                
-                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (from week ${recentExercise.week_number})`);
-                return expectedReps;
-              });
-              
-              console.log(`🔍 DEBUG - ✅ RPE-BASED REP PROGRESSION for ${log.exercise} in mesocycle ${mesocycleId}:`, newLog.expectedReps);
-            }
-
+            // Initialize arrays to proper length
             newLog.actualReps = Array(newLog.currentSets).fill(0);
-            newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
-              getTargetRPE(actualWeek, i, newLog.currentSets)
-            );
+            newLog.expectedReps = Array(newLog.currentSets).fill(newLog.plannedReps);
+            newLog.rpe = Array(newLog.currentSets).fill(7); // Temporary - will be recalculated later
             
           } else {
             console.log(`🔍 DEBUG - No previous data for ${log.exercise} in current mesocycle - using template values`);
@@ -930,15 +907,11 @@ export function WorkoutLog() {
             newLog.prefilledWeights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
             newLog.expectedReps = Array(newLog.currentSets).fill(newLog.plannedReps);
-            newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
-              getTargetRPE(actualWeek, i, newLog.currentSets)
-            );
+            newLog.rpe = Array(newLog.currentSets).fill(7); // Temporary - will be recalculated later
             console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values (clean mesocycle)`);
           }
           
           newLog = ensureArrayIntegrity(newLog);
-          
-          console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, expected reps:`, newLog.expectedReps);
           updatedLogs.push(newLog);
         } catch (error) {
           console.error(`🔍 DEBUG - Error processing exercise ${log.exercise}:`, error);
@@ -978,20 +951,16 @@ export function WorkoutLog() {
                 targetExercise.currentSets += adjustment;
                 targetExercise.plannedSets = targetExercise.currentSets;
                 
+                // Add new sets with empty values and proper array extensions
                 while (targetExercise.actualReps.length < targetExercise.currentSets) {
                   targetExercise.actualReps.push(0);
                   const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
                   targetExercise.weights.push(Number(lastWeight) || 0);
                   targetExercise.prefilledWeights.push(Number(lastWeight) || 0);
                   
-                  const newSetIndex = targetExercise.rpe.length;
-                  const newSetRPE = getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets);
-                  targetExercise.rpe.push(newSetRPE);
-                  
-                  const newSetExpectedReps = calculateNewSetExpectedReps(targetExercise, newSetRPE);
-                  targetExercise.expectedReps.push(newSetExpectedReps);
-                  
-                  console.log(`🔍 DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE}`);
+                  // Add temporary RPE - will be recalculated
+                  targetExercise.rpe.push(7);
+                  targetExercise.expectedReps.push(targetExercise.plannedReps);
                 }
                 
                 ensureArrayIntegrity(targetExercise);
@@ -1025,7 +994,46 @@ export function WorkoutLog() {
         }
       }
 
-      console.log('🔍 DEBUG - Final initialized logs with RPE-based progression and mesocycle isolation:', updatedLogs);
+      // ✅ FIXED ISSUE 2: Now recalculate RPE values AFTER all set adjustments are complete
+      console.log('🔍 DEBUG - RECALCULATING RPE VALUES AFTER SET ADJUSTMENTS...');
+      for (const log of updatedLogs) {
+        try {
+          // Recalculate RPE based on FINAL set count
+          log.rpe = Array.from({ length: log.currentSets }, (_, i) => 
+            getTargetRPE(actualWeek, i, log.currentSets)
+          );
+          
+          console.log(`🔍 DEBUG - ${log.exercise}: Final ${log.currentSets} sets, RPE values:`, log.rpe);
+          
+          // Now calculate reps progression with CORRECT RPE values (only for week 2+)
+          if (actualWeek >= 2 && !isDeloadWeek) {
+            const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay, mesocycleId);
+            
+            if (recentExercise) {
+              const prevActualReps = recentExercise.actual_reps || [];
+              const prevRPEs = recentExercise.rpe || [];
+              
+              log.expectedReps = Array.from({ length: log.currentSets }, (_, i) => {
+                const currentRPE = log.rpe[i];
+                const prevRPE = Number(prevRPEs[i]) || 7;
+                const prevActual = Number(prevActualReps[i]) || log.plannedReps;
+                
+                const expectedReps = calculateRepsFromRPEProgression(prevActual, prevRPE, currentRPE);
+                
+                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (CORRECTED)`);
+                return expectedReps;
+              });
+              
+              console.log(`🔍 DEBUG - ✅ CORRECTED RPE-BASED REP PROGRESSION for ${log.exercise}:`, log.expectedReps);
+            }
+          }
+          
+        } catch (error) {
+          console.error(`🔍 DEBUG - Error recalculating RPE/reps for ${log.exercise}:`, error);
+        }
+      }
+
+      console.log('🔍 DEBUG - Final initialized logs with CORRECTED RPE-based progression and mesocycle isolation:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
@@ -1136,7 +1144,7 @@ export function WorkoutLog() {
     });
   };
 
-  // Safe set management with validation
+  // ✅ FIXED ISSUE 1: Safe set management with validation and proper handling of current week
   const addSet = (exerciseIndex: number) => {
     setWorkoutLogs(prevLogs => {
       try {
@@ -1150,19 +1158,38 @@ export function WorkoutLog() {
         
         exercise.currentSets++;
         exercise.actualReps.push(0);
-        exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
-        exercise.prefilledWeights.push(exercise.prefilledWeights[exercise.prefilledWeights.length - 1] || 0);
+        
+        // ✅ FIXED ISSUE 1: For current week, keep weight empty. For future weeks, prefill from last set.
+        const isCurrentWeek = true; // This function is only called during current workout
+        if (isCurrentWeek) {
+          // Keep weight empty for new sets added during current week
+          exercise.weights.push(0);
+          exercise.prefilledWeights.push(0);
+          console.log(`🔍 DEBUG - Added set with EMPTY weight for current week exercise: ${exercise.exercise}`);
+        } else {
+          // For future weeks (this branch won't execute in current implementation, but kept for completeness)
+          const lastWeight = exercise.weights[exercise.weights.length - 1] || 0;
+          exercise.weights.push(lastWeight);
+          exercise.prefilledWeights.push(lastWeight);
+          console.log(`🔍 DEBUG - Added set with prefilled weight: ${lastWeight}`);
+        }
         
         const newSetIndex = exercise.rpe.length;
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
-        const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
-        exercise.expectedReps.push(newSetExpectedReps);
+        // For current week, keep expected reps empty (will show as placeholder)
+        if (isCurrentWeek) {
+          exercise.expectedReps.push(exercise.plannedReps);
+        } else {
+          // For future weeks, calculate based on best set performance
+          const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
+          exercise.expectedReps.push(newSetExpectedReps);
+        }
         
         exercise.completed = false;
         
-        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps to ${exercise.exercise}`);
+        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} to ${exercise.exercise}`);
         return updatedLogs;
       } catch (error) {
         console.error('🔍 DEBUG - Error adding set:', error);
