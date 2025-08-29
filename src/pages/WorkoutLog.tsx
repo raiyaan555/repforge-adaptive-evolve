@@ -654,7 +654,7 @@ export function WorkoutLog() {
     }
   };
 
-  // COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation and FIXED RPE/REP CALCULATION ORDER
+  // 🚨 CRITICAL FIX: Enhanced function with CORRECTED data structure consistency
   const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number, mesocycleId: string) => {
     try {
       console.log(`🚀 INITIALIZATION DEBUG - initializeWorkoutLogs called`);
@@ -880,7 +880,7 @@ export function WorkoutLog() {
         }
       }
 
-      // 🚨 CRITICAL FIX: Apply progression logic with CORRECTED SEQUENCE
+      // 🚨 CRITICAL FIX: Apply progression logic with CORRECTED SEQUENCE and CONSISTENT data structure
       // 1. First determine base sets and apply soreness adjustments
       // 2. Then calculate RPE for final set count
       // 3. Finally calculate expected reps based on correct RPE
@@ -890,6 +890,10 @@ export function WorkoutLog() {
           let newLog = { ...log };
           
           console.log(`🔄 EXERCISE PROCESSING DEBUG - Processing ${log.exercise} (${log.muscleGroup}) in mesocycle ${mesocycleId}`);
+          
+          // 🚨 CRITICAL FIX: Maintain consistent data structure for ALL exercises
+          let recentExercise = null;
+          const isDeloadWeek = actualWeek === workoutData.duration_weeks;
           
           // Week 1 should have NO prefills - start completely empty
           if (actualWeek === 1) {
@@ -904,15 +908,20 @@ export function WorkoutLog() {
             newLog.actualReps = Array(newLog.currentSets).fill(0);
             newLog.expectedReps = Array(newLog.currentSets).fill(0); // Week 1: No expected reps
             newLog.rpe = Array(newLog.currentSets).fill(7);
-            updatedLogs.push(ensureArrayIntegrity(newLog));
+            
+            // 🚨 CRITICAL FIX: Use consistent data structure
+            updatedLogs.push({ 
+              log: ensureArrayIntegrity(newLog), 
+              recentExercise: null, 
+              isDeloadWeek: false 
+            });
             continue;
           }
 
           // ✅ ENHANCED: Get most recent occurrence within SAME MESOCYCLE (now prioritizes previous week)
-          const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay, mesocycleId);
+          recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay, mesocycleId);
           console.log(`🔍 DEBUG - Recent data for ${log.exercise} in mesocycle ${mesocycleId}:`, recentExercise ? '✅ Found' : '❌ Not found');
           
-          const isDeloadWeek = actualWeek === workoutData.duration_weeks;
           console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${actualWeek}/${workoutData.duration_weeks})`);
           
           if (recentExercise) {
@@ -986,10 +995,11 @@ export function WorkoutLog() {
             console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values (clean mesocycle)`);
           }
           
-          // Store for later RPE/rep calculation after set adjustments
+          // 🚨 CRITICAL FIX: Store for later RPE/rep calculation with CONSISTENT structure
           updatedLogs.push({ log: newLog, recentExercise, isDeloadWeek });
         } catch (error) {
           console.error(`🔍 DEBUG - Error processing exercise ${log.exercise}:`, error);
+          // 🚨 CRITICAL FIX: Maintain consistent structure even for errors
           updatedLogs.push({ log: ensureArrayIntegrity(log), recentExercise: null, isDeloadWeek: false });
         }
       }
@@ -1068,6 +1078,11 @@ export function WorkoutLog() {
         try {
           const { log: newLog, recentExercise, isDeloadWeek } = item;
           
+          if (!newLog) {
+            console.error('🔍 DEBUG - Error: newLog is undefined in final processing');
+            continue;
+          }
+          
           console.log(`🎯 RPE CALCULATION DEBUG - Processing ${newLog.exercise} with FINAL ${newLog.currentSets} sets`);
           
           // NOW calculate RPE based on FINAL set count
@@ -1117,7 +1132,9 @@ export function WorkoutLog() {
           
         } catch (error) {
           console.error(`🔍 DEBUG - Error in final RPE/rep calculation for ${item.log?.exercise}:`, error);
-          finalLogs.push(ensureArrayIntegrity(item.log));
+          if (item.log) {
+            finalLogs.push(ensureArrayIntegrity(item.log));
+          }
         }
       }
 
