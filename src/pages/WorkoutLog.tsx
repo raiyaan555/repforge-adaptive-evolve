@@ -31,13 +31,14 @@ interface WorkoutLog {
   muscleGroup: string;
   plannedSets: number;
   plannedReps: number;
-  expectedReps: number[];
+  expectedReps: number[]; // ✅ Track expected reps for each set based on RPE progression
   actualReps: number[];
   weights: number[];
-  prefilledWeights: number[];
+  prefilledWeights: number[]; // ✅ Track prefilled weights to detect manual changes
   rpe: number[];
   completed: boolean;
   currentSets: number;
+  isNewSet?: boolean[]; // ✅ NEW: Track which sets were added during current week
 }
 
 interface MuscleGroupFeedback {
@@ -57,7 +58,6 @@ export function WorkoutLog() {
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [currentWeek, setCurrentWeek] = useState(1);
   const [currentDay, setCurrentDay] = useState(1);
-  const [currentMesocycleId, setCurrentMesocycleId] = useState<string>(''); // Track current mesocycle ID
   const [loading, setLoading] = useState(true);
 
   // MPC Feedback Modal
@@ -73,7 +73,7 @@ export function WorkoutLog() {
     canAddSets: false
   });
 
-  // SC Modal with explicit value state to reset between muscle groups
+  // ✅ FIX: SC Modal with explicit value state to reset between muscle groups
   const [scModal, setScModal] = useState<{
     isOpen: boolean;
     muscleGroup: string;
@@ -81,15 +81,16 @@ export function WorkoutLog() {
     resolve: (value: string | null) => void;
   }>({ isOpen: false, muscleGroup: '', pendingGroups: [], resolve: () => {} });
 
+  // ✅ FIX: Add separate state for current soreness selection
   const [currentSorenessValue, setCurrentSorenessValue] = useState<string>('');
 
   const [completedMuscleGroups, setCompletedMuscleGroups] = useState<Set<string>>(new Set());
   const [muscleGroupFeedbacks, setMuscleGroupFeedbacks] = useState<Map<string, MuscleGroupFeedback>>(new Map());
 
-  // RPE Info Modal
+  // ✅ NEW: RPE Info Modal
   const [rpeInfoModal, setRpeInfoModal] = useState(false);
 
-  // Weight Change Confirmation Modal (Week 2+ only)
+  // ✅ NEW: Weight Change Confirmation Modal (Week 2+ only)
   const [weightChangeModal, setWeightChangeModal] = useState<{
     isOpen: boolean;
     exerciseIndex: number;
@@ -99,45 +100,31 @@ export function WorkoutLog() {
     resolve: (keepOriginal: boolean) => void;
   }>({ isOpen: false, exerciseIndex: -1, setIndex: -1, originalWeight: 0, newWeight: 0, resolve: () => {} });
 
-  // UPDATED: Enhanced RPE function with detailed debugging
+  // ✅ NEW: Function to get target RPE based on week and set position
   const getTargetRPE = (week: number, setIndex: number, totalSets: number) => {
-    console.log(`🎯 RPE DEBUG - getTargetRPE called: week=${week}, setIndex=${setIndex}, totalSets=${totalSets}`);
-    
-    if (week === 1) {
-      console.log(`🎯 RPE DEBUG - Week 1 detected: returning RPE 7`);
-      return 7;
-    }
-    if (week === 7) {
-      console.log(`🎯 RPE DEBUG - Deload week detected: returning RPE 7`);
-      return 7; // Deload week
-    }
+    if (week === 1) return 7;
+    if (week === 7) return 7; // Deload week
     
     const isLastSet = setIndex === totalSets - 1;
-    console.log(`🎯 RPE DEBUG - isLastSet calculation: setIndex(${setIndex}) === totalSets-1(${totalSets-1}) = ${isLastSet}`);
     
     if (week >= 2 && week <= 3) {
-      const rpe = isLastSet ? 9 : 8;
-      console.log(`🎯 RPE DEBUG - Week ${week} (2-3 range): isLastSet=${isLastSet} → RPE ${rpe}`);
-      return rpe;
+      return isLastSet ? 9 : 8;
     }
     if (week >= 4 && week <= 5) {
-      const rpe = isLastSet ? 10 : 9;
-      console.log(`🎯 RPE DEBUG - Week ${week} (4-5 range): isLastSet=${isLastSet} → RPE ${rpe}`);
-      return rpe;
+      return isLastSet ? 10 : 9;
     }
     if (week === 6) {
-      console.log(`🎯 RPE DEBUG - Week 6: returning RPE 10 for all sets`);
       return 10;
     }
     
-    console.log(`🎯 RPE DEBUG - Fallback: returning RPE 7`);
     return 7; // fallback
   };
 
-  // Input validation helpers
+  // ✅ NEW: Input validation helpers
   const validateNumericInput = (value: string, field: 'reps' | 'weight' | 'rpe'): number => {
     console.log(`🔍 DEBUG - validateNumericInput called with value="${value}", field="${field}"`);
     
+    // Remove non-numeric characters except decimal point
     const cleanValue = value.replace(/[^0-9.]/g, '');
     const numValue = parseFloat(cleanValue);
     
@@ -145,12 +132,13 @@ export function WorkoutLog() {
     
     if (isNaN(numValue) || numValue < 0) {
       switch (field) {
-        case 'rpe': return 7;
-        case 'reps': return 1;
-        case 'weight': return 0;
+        case 'rpe': return 7; // Default RPE
+        case 'reps': return 1; // Minimum reps
+        case 'weight': return 0; // Can be 0 for bodyweight
       }
     }
     
+    // Apply field-specific constraints
     let finalValue = numValue;
     switch (field) {
       case 'rpe': 
@@ -169,13 +157,10 @@ export function WorkoutLog() {
   };
 
   const ensureArrayIntegrity = (exercise: WorkoutLog): WorkoutLog => {
-    console.log(`🔧 ARRAY DEBUG - ensureArrayIntegrity called for ${exercise.exercise}`);
-    console.log(`🔧 ARRAY DEBUG - currentSets: ${exercise.currentSets}`);
-    console.log(`🔧 ARRAY DEBUG - BEFORE - actualReps length: ${exercise.actualReps?.length}, weights length: ${exercise.weights?.length}, expectedReps length: ${exercise.expectedReps?.length}`);
-    
     const correctedExercise = { ...exercise };
     const targetLength = correctedExercise.currentSets;
     
+    // Ensure all arrays match currentSets length
     correctedExercise.actualReps = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.actualReps[i] || 0
     );
@@ -191,17 +176,15 @@ export function WorkoutLog() {
     correctedExercise.expectedReps = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.expectedReps[i] || correctedExercise.plannedReps
     );
-    
-    console.log(`🔧 ARRAY DEBUG - AFTER - actualReps length: ${correctedExercise.actualReps?.length}, weights length: ${correctedExercise.weights?.length}, expectedReps length: ${correctedExercise.expectedReps?.length}`);
-    console.log(`🔧 ARRAY DEBUG - AFTER - actualReps: [${correctedExercise.actualReps}]`);
-    console.log(`🔧 ARRAY DEBUG - AFTER - weights: [${correctedExercise.weights}]`);
-    console.log(`🔧 ARRAY DEBUG - AFTER - expectedReps: [${correctedExercise.expectedReps}]`);
-    console.log(`🔧 ARRAY DEBUG - AFTER - rpe: [${correctedExercise.rpe}]`);
+    // ✅ NEW: Ensure isNewSet array is properly sized
+    correctedExercise.isNewSet = Array.from({ length: targetLength }, (_, i) => 
+      correctedExercise.isNewSet?.[i] || false
+    );
     
     return correctedExercise;
   };
 
-  // FIXED: Single useEffect with proper cleanup and mesocycle_id loading
+  // ✅ FIXED: Single useEffect with proper cleanup to prevent race conditions
   useEffect(() => {
     let isMounted = true;
     let isInitializing = false;
@@ -225,7 +208,7 @@ export function WorkoutLog() {
           return;
         }
         
-        // 2. Load active workout info (week/day/mesocycle_id)
+        // 2. Load active workout info (week/day)
         console.log('🔍 DEBUG - Loading active workout info...');
         const activeInfo = await loadActiveWorkoutInfo();
         if (!isMounted) {
@@ -233,22 +216,24 @@ export function WorkoutLog() {
           return;
         }
         
+        // ✅ FIX: Use actual values from database instead of state
         const actualWeek = activeInfo?.current_week || 1;
         const actualDay = activeInfo?.current_day || 1;
-        const mesocycleId = activeInfo?.mesocycle_id || '';
         
-        console.log('🔍 DEBUG - Using actual week/day/mesocycle:', actualWeek, actualDay, mesocycleId);
-        setCurrentMesocycleId(mesocycleId);
+        console.log('🔍 DEBUG - Using actual week/day values:', actualWeek, actualDay);
         
+        // ✅ CRITICAL FIX: Stop loading BEFORE initializing workout logs
+        // This allows the soreness modal to show properly
         if (isMounted) {
           setLoading(false);
           console.log('🔍 DEBUG - Loading stopped before workout logs initialization');
         }
         
-        // 3. Initialize workout logs with mesocycle ID
+        // 3. Initialize workout logs with actual values (may show modal)
         console.log('🔍 DEBUG - Initializing workout logs...');
-        await initializeWorkoutLogs(workoutData, actualWeek, actualDay, mesocycleId);
+        await initializeWorkoutLogs(workoutData, actualWeek, actualDay);
         
+        // 4. Reset state for new workout
         if (isMounted) {
           setCompletedMuscleGroups(new Set());
           setMuscleGroupFeedbacks(new Map());
@@ -283,6 +268,7 @@ export function WorkoutLog() {
   const loadWorkout = async () => {
     try {
       console.log('🔍 DEBUG - Querying default_workouts...');
+      // Load workout from either default_workouts or custom_workouts
       let { data: defaultWorkout } = await supabase
         .from('default_workouts')
         .select('*')
@@ -321,19 +307,18 @@ export function WorkoutLog() {
     }
   };
 
-  // UPDATED: Now loads mesocycle_id
   const loadActiveWorkoutInfo = async () => {
     try {
       console.log('🔍 DEBUG - Querying active_workouts...');
       const { data: activeWorkout } = await supabase
         .from('active_workouts')
-        .select('current_week, current_day, mesocycle_id')
+        .select('current_week, current_day')
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
         .maybeSingle();
         
       if (activeWorkout) {
-        console.log('🔍 DEBUG - Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day, 'Mesocycle ID:', activeWorkout.mesocycle_id);
+        console.log('🔍 DEBUG - Loading active workout info - Week:', activeWorkout.current_week, 'Day:', activeWorkout.current_day);
         setCurrentWeek(activeWorkout.current_week);
         setCurrentDay(activeWorkout.current_day);
         return activeWorkout;
@@ -347,7 +332,7 @@ export function WorkoutLog() {
     }
   };
 
-  // Updated sequential SC prompting
+  // ✅ FIX: Updated sequential SC prompting with proper value reset
   const promptForSoreness = useCallback(async (muscleGroups: string[]): Promise<Record<string, string>> => {
     console.log('🔍 DEBUG - promptForSoreness called with:', muscleGroups);
     const results: Record<string, string> = {};
@@ -357,12 +342,13 @@ export function WorkoutLog() {
         const currentGroup = muscleGroups[i];
         console.log(`🔍 DEBUG - Processing soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
         
+        // ✅ FIX: Reset soreness value for each new muscle group
         setCurrentSorenessValue('');
         
         const result = await new Promise<string | null>((resolve, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error('Soreness prompt timeout'));
-          }, 60000);
+          }, 60000); // 60 second timeout
           
           console.log(`🔍 DEBUG - Setting scModal state for ${currentGroup}`);
           setScModal({
@@ -382,24 +368,26 @@ export function WorkoutLog() {
           results[currentGroup] = result;
         }
         
+        // Close modal and add small delay for better UX
         console.log(`🔍 DEBUG - Closing modal for ${currentGroup}`);
         setScModal(prev => ({ ...prev, isOpen: false }));
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     } catch (error) {
       console.error('🔍 DEBUG - Soreness prompting failed:', error);
+      // Continue with empty results rather than failing
     }
     
     console.log('🔍 DEBUG - Final soreness results:', results);
     return results;
   }, []);
 
-  // UPDATED: Function to get weekly sets count per muscle group - NOW FILTERED BY MESOCYCLE_ID
-  const getWeeklySetsByMuscleGroup = async (muscleGroups: string[], actualWeek: number, mesocycleId: string) => {
+  // ✅ NEW: Function to get weekly sets count per muscle group
+  const getWeeklySetsByMuscleGroup = async (muscleGroups: string[], actualWeek: number) => {
     const weeklySetsByMuscleGroup: Record<string, number> = {};
     
     try {
-      if (!user?.id || !workoutId || !Array.isArray(muscleGroups) || muscleGroups.length === 0 || !mesocycleId) {
+      if (!user?.id || !workoutId || !Array.isArray(muscleGroups) || muscleGroups.length === 0) {
         console.log('🔍 DEBUG - Invalid parameters for weekly sets lookup');
         muscleGroups.forEach(mg => weeklySetsByMuscleGroup[mg] = 0);
         return weeklySetsByMuscleGroup;
@@ -410,22 +398,23 @@ export function WorkoutLog() {
         .select('muscle_group, actual_sets')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId)
         .eq('week_number', actualWeek)
         .in('muscle_group', muscleGroups);
         
       if (error) throw error;
       
+      // Calculate total weekly sets per muscle group
       for (const mg of muscleGroups) {
         const mgData = weeklyData?.filter(d => d.muscle_group === mg) || [];
         weeklySetsByMuscleGroup[mg] = mgData.reduce((total, d) => {
           const sets = Number(d.actual_sets) || 0;
           return total + sets;
         }, 0);
-        console.log(`🔍 DEBUG - Weekly sets for ${mg} (mesocycle ${mesocycleId}): ${weeklySetsByMuscleGroup[mg]}`);
+        console.log(`🔍 DEBUG - Weekly sets for ${mg}: ${weeklySetsByMuscleGroup[mg]}`);
       }
     } catch (error) {
       console.error('🔍 DEBUG - Failed to load weekly sets data:', error);
+      // Default to 0 if we can't load data
       for (const mg of muscleGroups) {
         weeklySetsByMuscleGroup[mg] = 0;
       }
@@ -434,17 +423,19 @@ export function WorkoutLog() {
     return weeklySetsByMuscleGroup;
   };
 
-  // Function to find exercise with min/max sets in a muscle group
+  // ✅ NEW: Function to find exercise with min/max sets in a muscle group
   const findExerciseForSetAdjustment = (logs: WorkoutLog[], muscleGroup: string, isIncrease: boolean) => {
     try {
       const mgExercises = logs.filter(log => log?.muscleGroup === muscleGroup);
       if (mgExercises.length === 0) return null;
       
       if (isIncrease) {
+        // Find exercise with minimum sets
         return mgExercises.reduce((min, current) => 
           (current?.currentSets || 0) < (min?.currentSets || 0) ? current : min
         );
       } else {
+        // Find exercise with maximum sets
         return mgExercises.reduce((max, current) => 
           (current?.currentSets || 0) > (max?.currentSets || 0) ? current : max
         );
@@ -455,63 +446,36 @@ export function WorkoutLog() {
     }
   };
 
-  // ✅ FIXED: Enhanced to prioritize PREVIOUS WEEK (actualWeek - 1) FIRST, then fall back
-  const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number, mesocycleId: string) => {
+  // ✅ UPDATED: Enhanced to prioritize same exercise on same day for better duplication handling
+  const getMostRecentExerciseData = async (exerciseName: string, muscleGroup: string, actualWeek: number, actualDay: number) => {
     try {
-      console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup}) on Day ${actualDay} in mesocycle ${mesocycleId}`);
+      console.log(`🔍 DEBUG - Looking for most recent data for ${exerciseName} (${muscleGroup}) on Day ${actualDay}`);
       
-      // ✅ PRIORITY 1: Look for data from PREVIOUS WEEK (actualWeek - 1) on same day
-      if (actualWeek > 1) {
-        const previousWeek = actualWeek - 1;
-        console.log(`🔍 DEBUG - Checking previous week ${previousWeek} for ${exerciseName}`);
-        
-        const { data: previousWeekData, error: prevWeekError } = await supabase
-          .from('mesocycle')
-          .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
-          .eq('user_id', user.id)
-          .eq('plan_id', workoutId)
-          .eq('mesocycle_id', mesocycleId)
-          .eq('exercise_name', exerciseName)
-          .eq('muscle_group', muscleGroup)
-          .eq('week_number', previousWeek)
-          .eq('day_number', actualDay)
-          .limit(1);
-        
-        if (!prevWeekError && previousWeekData && previousWeekData.length > 0) {
-          console.log(`🔍 DEBUG - ✅ Found exercise from PREVIOUS WEEK ${previousWeek} (preferred):`, previousWeekData[0]);
-          return previousWeekData[0];
-        } else {
-          console.log(`🔍 DEBUG - No data found from previous week ${previousWeek}`);
-        }
-      }
-      
-      // ✅ PRIORITY 2: Look for same exercise on same day in any previous weeks within SAME MESOCYCLE
+      // ✅ PRIORITY 1: Look for same exercise on same day in previous weeks (handles exercise duplication properly)
       const { data: sameDayData, error: sameDayError } = await supabase
         .from('mesocycle')
         .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId)
         .eq('exercise_name', exerciseName)
         .eq('muscle_group', muscleGroup)
-        .eq('day_number', actualDay)
+        .eq('day_number', actualDay) // ✅ Same day constraint for proper duplication handling
         .lt('week_number', actualWeek)
         .order('week_number', { ascending: false })
         .limit(1);
       
       if (!sameDayError && sameDayData && sameDayData.length > 0) {
-        console.log(`🔍 DEBUG - ✅ Found same exercise on same day from Week ${sameDayData[0].week_number} in current mesocycle:`, sameDayData[0]);
+        console.log(`🔍 DEBUG - ✅ Found same exercise on same day from Week ${sameDayData[0].week_number}:`, sameDayData[0]);
         return sameDayData[0];
       }
       
-      // ✅ FALLBACK: If no same-day data found in current mesocycle, look for any previous occurrence
-      console.log(`🔍 DEBUG - No same-day data found in current mesocycle, trying any previous occurrence...`);
+      // ✅ FALLBACK: If no same-day data found, look for any previous occurrence
+      console.log(`🔍 DEBUG - No same-day data found, trying any previous occurrence...`);
       const { data: anyPreviousData, error: anyError } = await supabase
         .from('mesocycle')
         .select('exercise_name, muscle_group, actual_sets, actual_reps, weight_used, rpe, pump_level, week_number, day_number, planned_reps')
         .eq('user_id', user.id)
         .eq('plan_id', workoutId)
-        .eq('mesocycle_id', mesocycleId)
         .eq('exercise_name', exerciseName)
         .eq('muscle_group', muscleGroup)
         .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`)
@@ -525,22 +489,23 @@ export function WorkoutLog() {
       }
       
       const mostRecent = anyPreviousData?.[0];
-      console.log(`🔍 DEBUG - Most recent data for ${exerciseName} in current mesocycle:`, mostRecent ? '✅ Found (fallback)' : '❌ Not found');
+      console.log(`🔍 DEBUG - Most recent data for ${exerciseName}:`, mostRecent ? '✅ Found (fallback)' : '❌ Not found');
       
       return mostRecent || null;
     } catch (error) {
-      console.error(`🔍 DEBUG - Failed to get recent data for ${exerciseName} in mesocycle ${mesocycleId}:`, error);
+      console.error(`🔍 DEBUG - Failed to get recent data for ${exerciseName}:`, error);
       return null;
     }
   };
 
-  // Function to get best performing set metrics
+  // ✅ NEW: Function to get best performing set metrics
   const getBestSetMetrics = (actualReps: any[], rpe: any[]) => {
     try {
       if (!Array.isArray(actualReps) || !Array.isArray(rpe) || actualReps.length === 0) {
         return { bestReps: 0, averageRpe: 7 };
       }
 
+      // Convert to numbers and filter valid data
       const validSets = [];
       for (let i = 0; i < Math.min(actualReps.length, rpe.length); i++) {
         const reps = Number(actualReps[i]) || 0;
@@ -554,12 +519,14 @@ export function WorkoutLog() {
         return { bestReps: 0, averageRpe: 7 };
       }
 
+      // Find best performing set (highest reps, or if tied, lowest RPE)
       const bestSet = validSets.reduce((best, current) => {
         if (current.reps > best.reps) return current;
         if (current.reps === best.reps && current.rpe < best.rpe) return current;
         return best;
       });
 
+      // Calculate average RPE across all sets
       const averageRpe = validSets.reduce((sum, set) => sum + set.rpe, 0) / validSets.length;
 
       console.log(`🔍 DEBUG - Best set metrics: reps=${bestSet.reps}, avgRPE=${averageRpe.toFixed(1)}`);
@@ -570,48 +537,47 @@ export function WorkoutLog() {
     }
   };
 
-  // UPDATED: Enhanced RPE-based progression calculation with under-performance handling and detailed debugging
+  // ✅ UPDATED: Enhanced RPE-based progression with underperformance logic
   const calculateRepsFromRPEProgression = (
     previousReps: number, 
     previousRPE: number, 
     currentRPE: number, 
-    expectedReps?: number
+    expectedReps?: number // ✅ NEW: Expected reps for underperformance check
   ): number => {
-    console.log(`💪 REP PROGRESSION DEBUG - calculateRepsFromRPEProgression called:`);
-    console.log(`💪 REP PROGRESSION DEBUG - previousReps: ${previousReps}`);
-    console.log(`💪 REP PROGRESSION DEBUG - previousRPE: ${previousRPE}`);
-    console.log(`💪 REP PROGRESSION DEBUG - currentRPE: ${currentRPE}`);
-    console.log(`💪 REP PROGRESSION DEBUG - expectedReps: ${expectedReps}`);
+    console.log(`🔍 DEBUG - RPE Progression: ${previousReps} reps @ RPE ${previousRPE} → RPE ${currentRPE}${expectedReps ? `, expected: ${expectedReps}` : ''}`);
     
-    // Check if under-performed (actual < expected)
+    // ✅ NEW: Check for underperformance (actual < expected)
     if (expectedReps && previousReps < expectedReps) {
-      console.log(`💪 REP PROGRESSION DEBUG - UNDER-PERFORMANCE DETECTED: actual ${previousReps} < expected ${expectedReps}`);
+      console.log(`🔍 DEBUG - Underperformance detected: ${previousReps} < ${expectedReps}`);
       
       if (currentRPE >= previousRPE) {
-        // If RPE this week is higher or same as last week
-        console.log(`💪 REP PROGRESSION DEBUG - RPE same/higher (${currentRPE} >= ${previousRPE}): keeping same reps ${previousReps}`);
+        // RPE same or higher: keep same reps
+        console.log(`🔍 DEBUG - RPE same/higher (${currentRPE} >= ${previousRPE}): keeping ${previousReps} reps`);
         return Math.max(1, previousReps);
       } else {
-        // If RPE this week is lower than last week
-        console.log(`💪 REP PROGRESSION DEBUG - RPE lower (${currentRPE} < ${previousRPE}): reducing reps by 1`);
+        // RPE lower: reduce by 1
+        console.log(`🔍 DEBUG - RPE lower (${currentRPE} < ${previousRPE}): reducing to ${previousReps - 1} reps`);
         return Math.max(1, previousReps - 1);
       }
     }
     
-    // Normal progression: lastWeekReps + (thisWeekRPE - lastWeekRPE)
+    // ✅ STANDARD LOGIC: Current reps = Previous reps + (Current RPE - Previous RPE)
     const rpeDifference = currentRPE - previousRPE;
     const newReps = previousReps + rpeDifference;
+    
+    // ✅ Ensure minimum 1 rep
     const finalReps = Math.max(1, newReps);
     
-    console.log(`💪 REP PROGRESSION DEBUG - NORMAL PROGRESSION: ${previousReps} + (${currentRPE} - ${previousRPE}) = ${finalReps}`);
+    console.log(`🔍 DEBUG - Standard calculation: ${previousReps} + (${currentRPE} - ${previousRPE}) = ${finalReps}`);
     return finalReps;
   };
 
-  // Function to find best set in current exercise for new set calculation
+  // ✅ NEW: Function to find best set in current exercise for new set calculation
   const findBestSetInExercise = (exercise: WorkoutLog): { reps: number; rpe: number } => {
     try {
       const validSets = [];
       
+      // Look at expected reps (which come from previous week's actual performance)
       for (let i = 0; i < exercise.expectedReps.length; i++) {
         const reps = exercise.expectedReps[i] || 0;
         const rpe = exercise.rpe[i] || 7;
@@ -624,6 +590,7 @@ export function WorkoutLog() {
         return { reps: exercise.plannedReps, rpe: 7 };
       }
       
+      // Find best set (highest reps, or if tied, lowest RPE)
       const bestSet = validSets.reduce((best, current) => {
         if (current.reps > best.reps) return current;
         if (current.reps === best.reps && current.rpe < best.rpe) return current;
@@ -638,37 +605,35 @@ export function WorkoutLog() {
     }
   };
 
-  // UPDATED: Function to calculate expected reps for a new set (empty for current week)
+  // ✅ UPDATED: Calculate expected reps for new sets (only for next week onwards)
   const calculateNewSetExpectedReps = (exercise: WorkoutLog, newSetRPE: number): number => {
     try {
-      console.log(`🆕 NEW SET DEBUG - calculateNewSetExpectedReps called for ${exercise.exercise}`);
-      console.log(`🆕 NEW SET DEBUG - newSetRPE: ${newSetRPE}`);
-      console.log(`🆕 NEW SET DEBUG - Returning 0 for new set (user will enter manually)`);
+      // ✅ NEW: For current week, new sets should have 0 expected reps (empty)
+      if (currentWeek === 1) {
+        console.log(`🔍 DEBUG - Week 1: New set gets planned reps (${exercise.plannedReps})`);
+        return exercise.plannedReps;
+      }
       
-      // NEW: For new sets in current week, return 0 to keep empty
-      // User will manually enter reps for new sets in current week
-      return 0;
+      const bestSet = findBestSetInExercise(exercise);
+      const expectedReps = calculateRepsFromRPEProgression(bestSet.reps, bestSet.rpe, newSetRPE);
+      
+      console.log(`🔍 DEBUG - New set calculation: Best set ${bestSet.reps}@RPE${bestSet.rpe} → ${expectedReps}@RPE${newSetRPE}`);
+      return expectedReps;
     } catch (error) {
       console.error('🔍 DEBUG - Error calculating new set expected reps:', error);
-      return 0;
+      return exercise.plannedReps;
     }
   };
 
-  // COMPLETELY REWRITTEN: Enhanced function with proper mesocycle isolation
-  const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number, mesocycleId: string) => {
+  // ✅ COMPLETELY REWRITTEN: Enhanced function with proper same-exercise progression and Week 1 Day 2+ soreness
+  const initializeWorkoutLogs = async (workoutData: any, actualWeek: number, actualDay: number) => {
     try {
-      console.log(`🚀 INITIALIZATION DEBUG - initializeWorkoutLogs called`);
-      console.log(`🚀 INITIALIZATION DEBUG - actualWeek: ${actualWeek}`);
-      console.log(`🚀 INITIALIZATION DEBUG - actualDay: ${actualDay}`);
-      console.log(`🚀 INITIALIZATION DEBUG - mesocycleId: ${mesocycleId}`);
-      
       const structure = workoutData?.workout_structure as WorkoutStructure;
       if (!structure) {
         console.error('🔍 DEBUG - No workout structure found');
         return;
       }
 
-      console.log('🔍 DEBUG - Initializing with mesocycle ID:', mesocycleId);
       console.log('🔍 DEBUG - Workout structure:', structure);
       console.log('🔍 DEBUG - Actual week passed:', actualWeek);
       console.log('🔍 DEBUG - Actual day passed:', actualDay);
@@ -680,7 +645,7 @@ export function WorkoutLog() {
       console.log('🔍 DEBUG - Day workout:', dayWorkout);
       console.log('🔍 DEBUG - Day workout length:', dayWorkout.length);
       
-      // Create base logs from template
+      // Create base logs from template with enhanced validation
       const baseLogs: WorkoutLog[] = [];
       for (const mg of dayWorkout) {
         if (!mg?.muscleGroup || !Array.isArray(mg.exercises)) {
@@ -712,6 +677,7 @@ export function WorkoutLog() {
             rpe: Array(defaultSets).fill(getTargetRPE(actualWeek, 0, defaultSets)),
             completed: false,
             currentSets: defaultSets,
+            isNewSet: Array(defaultSets).fill(false), // ✅ NEW: All template sets are not new
           });
           console.log(`🔍 DEBUG - Added exercise: ${ex.name} to ${mg.muscleGroup}`);
         }
@@ -726,47 +692,46 @@ export function WorkoutLog() {
 
       const muscleGroups = Array.from(new Set(baseLogs.map(l => l.muscleGroup).filter(Boolean)));
       console.log('🔍 DEBUG - Unique muscle groups for today:', muscleGroups);
+      console.log('🔍 DEBUG - Actual week before SC check:', actualWeek);
       
-      // UPDATED: Soreness checking with mesocycle_id filtering
+      // ✅ FIXED: Start soreness checking from Week 1 Day 2+
       const scGroupsToAsk: string[] = [];
       
       for (const mg of muscleGroups) {
         let shouldAsk = false;
         
         if (actualWeek === 1 && actualDay >= 2) {
-          // Week 1, Day 2+ → check if muscle group was trained in previous days of same week IN SAME MESOCYCLE
-          console.log(`🔍 DEBUG - Week 1, Day ${actualDay}: Checking previous days for ${mg} in mesocycle ${mesocycleId}`);
+          // Week 1, Day 2+ → check if muscle group was trained in previous days of same week
+          console.log(`🔍 DEBUG - Week 1, Day ${actualDay}: Checking previous days for ${mg}`);
           try {
             const { data: sameWeekPrevDays } = await supabase
               .from('mesocycle')
               .select('id, day_number')
               .eq('user_id', user.id)
               .eq('plan_id', workoutId)
-              .eq('mesocycle_id', mesocycleId)
               .eq('week_number', actualWeek)
               .eq('muscle_group', mg)
               .lt('day_number', actualDay);
             
-            console.log(`🔍 DEBUG - Found ${(sameWeekPrevDays || []).length} previous same-week sessions for ${mg} in current mesocycle:`, sameWeekPrevDays);
+            console.log(`🔍 DEBUG - Found ${(sameWeekPrevDays || []).length} previous same-week sessions for ${mg}:`, sameWeekPrevDays);
             shouldAsk = (sameWeekPrevDays || []).length > 0;
           } catch (error) {
             console.error('🔍 DEBUG - Error checking same week previous days:', error);
             shouldAsk = false;
           }
         } else if (actualWeek >= 2) {
-          // Week 2+ → check if muscle group was trained in any previous days IN SAME MESOCYCLE
-          console.log(`🔍 DEBUG - Week ${actualWeek}: Checking any previous training for ${mg} in mesocycle ${mesocycleId}`);
+          // Week 2+ → check if muscle group was trained in any previous days
+          console.log(`🔍 DEBUG - Week ${actualWeek}: Checking any previous training for ${mg}`);
           try {
             const { data: anyPrevious } = await supabase
               .from('mesocycle')
               .select('id, week_number, day_number')
               .eq('user_id', user.id)
               .eq('plan_id', workoutId)
-              .eq('mesocycle_id', mesocycleId)
               .eq('muscle_group', mg)
               .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`);
             
-            console.log(`🔍 DEBUG - Found ${(anyPrevious || []).length} previous sessions for ${mg} in current mesocycle:`, anyPrevious);
+            console.log(`🔍 DEBUG - Found ${(anyPrevious || []).length} previous sessions for ${mg}:`, anyPrevious);
             shouldAsk = (anyPrevious || []).length > 0;
           } catch (error) {
             console.error('🔍 DEBUG - Error checking previous sessions:', error);
@@ -778,45 +743,47 @@ export function WorkoutLog() {
           scGroupsToAsk.push(mg);
           console.log(`🔍 DEBUG - ✅ ADDED ${mg} to soreness check list`);
         } else {
-          console.log(`🔍 DEBUG - ❌ SKIPPED ${mg} - shouldAsk = false (no previous data in current mesocycle)`);
+          console.log(`🔍 DEBUG - ❌ SKIPPED ${mg} - shouldAsk = false`);
         }
         
-        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${actualWeek}, day=${actualDay}, mesocycle=${mesocycleId})`);
+        console.log(`🔍 DEBUG - ${mg}: shouldAsk=${shouldAsk} (week=${actualWeek}, day=${actualDay})`);
       }
 
       console.log('🔍 DEBUG - Final scGroupsToAsk array:', scGroupsToAsk);
+      console.log('🔍 DEBUG - scGroupsToAsk.length:', scGroupsToAsk.length);
 
       let scResults: Record<string, string> = {};
 
       if (scGroupsToAsk.length > 0) {
         console.log('🔍 DEBUG - ✅ CALLING promptForSoreness with groups:', scGroupsToAsk);
+        
+        // Ask for soreness sequentially if needed
         scResults = await promptForSoreness(scGroupsToAsk);
         console.log('🔍 DEBUG - ✅ SC Results received:', scResults);
       } else {
-        console.log('🔍 DEBUG - ❌ NO GROUPS TO ASK - scGroupsToAsk is empty (clean mesocycle start)');
+        console.log('🔍 DEBUG - ❌ NO GROUPS TO ASK - scGroupsToAsk is empty');
       }
 
-      // UPDATED: Save SC results with mesocycle_id
+      // Save SC results to database with error handling
       for (const [mg, sc] of Object.entries(scResults)) {
         try {
-          console.log(`🔍 DEBUG - Saving soreness result: ${mg} = ${sc} for mesocycle ${mesocycleId}`);
+          console.log(`🔍 DEBUG - Saving soreness result: ${mg} = ${sc}`);
           await supabase.from('muscle_soreness').insert({
             user_id: user.id,
             workout_date: new Date().toISOString().split('T')[0],
             muscle_group: mg,
             soreness_level: sc,
-            healed: sc === 'none',
-            mesocycle_id: mesocycleId
+            healed: sc === 'none'
           });
         } catch (error) {
           console.error(`🔍 DEBUG - Failed to save soreness for ${mg}:`, error);
         }
       }
 
-      // UPDATED: Get weekly sets count per muscle group with mesocycle_id
-      const weeklySetsByMuscleGroup = await getWeeklySetsByMuscleGroup(muscleGroups, actualWeek, mesocycleId);
+      // ✅ NEW: Get weekly sets count per muscle group
+      const weeklySetsByMuscleGroup = await getWeeklySetsByMuscleGroup(muscleGroups, actualWeek);
 
-      // UPDATED: Get previous pump levels for muscle groups with mesocycle_id filtering
+      // ✅ NEW: Get previous pump levels for muscle groups (for MPC calculation)
       const pumpByGroup: Record<string, 'none'|'medium'|'amazing'> = {};
       if (actualWeek >= 2) {
         try {
@@ -824,7 +791,6 @@ export function WorkoutLog() {
             .from('pump_feedback')
             .select('muscle_group, pump_level')
             .eq('user_id', user.id)
-            .eq('mesocycle_id', mesocycleId)
             .order('workout_date', { ascending: false })
             .limit(50);
             
@@ -835,7 +801,7 @@ export function WorkoutLog() {
                 const mapped = recentPump.pump_level === 'none' ? 'none' : 
                               recentPump.pump_level === 'amazing' ? 'amazing' : 'medium';
                 pumpByGroup[mg] = mapped;
-                console.log(`🔍 DEBUG - ${mg} previous pump in current mesocycle: ${recentPump.pump_level} → ${mapped}`);
+                console.log(`🔍 DEBUG - ${mg} previous pump: ${recentPump.pump_level} → ${mapped}`);
               } else {
                 pumpByGroup[mg] = 'medium';
               }
@@ -849,7 +815,7 @@ export function WorkoutLog() {
         }
       }
 
-      // Sets adjustment function
+      // ✅ FIXED: Sets adjustment function
       const setsAdjustment = (
         sc: 'none'|'medium'|'very_sore'|'extremely_sore'|undefined,
         pump: 'none'|'medium'|'amazing'
@@ -866,7 +832,7 @@ export function WorkoutLog() {
         return 0;
       };
 
-      // Calculate set adjustments per muscle group
+      // ✅ NEW: Calculate set adjustments per muscle group first
       const muscleGroupAdjustments: Record<string, number> = {};
       for (const mg of muscleGroups) {
         if (actualWeek >= 2) {
@@ -874,149 +840,123 @@ export function WorkoutLog() {
           const pump = pumpByGroup[mg] || 'medium';
           const adjustment = setsAdjustment(sc, pump);
           muscleGroupAdjustments[mg] = adjustment;
-          console.log(`🔍 DEBUG - Muscle group ${mg} adjustment: ${adjustment} sets (SC:${sc}, MPC:${pump}) in mesocycle ${mesocycleId}`);
+          console.log(`🔍 DEBUG - Muscle group ${mg} adjustment: ${adjustment} sets (SC:${sc}, MPC:${pump})`);
         } else {
           muscleGroupAdjustments[mg] = 0;
         }
       }
 
-      // UPDATED: Apply progression logic with mesocycle_id filtering and enhanced under-performance handling
+      // ✅ UPDATED: Apply progression logic with enhanced RPE-based rep calculation including underperformance
       const updatedLogs = [];
       for (const log of baseLogs) {
         try {
           let newLog = { ...log };
           
-          console.log(`🔄 EXERCISE PROCESSING DEBUG - Processing ${log.exercise} (${log.muscleGroup}) in mesocycle ${mesocycleId}`);
+          console.log(`🔍 DEBUG - Processing ${log.exercise} (${log.muscleGroup})`);
           
-          // Week 1 should have NO prefills - start completely empty
+          // ✅ FIX: Week 1 should have NO prefills - start completely empty
           if (actualWeek === 1) {
-            console.log(`📅 WEEK 1 DEBUG - ${log.exercise} - No prefills, starting empty (new mesocycle)`);
-            console.log(`📅 WEEK 1 DEBUG - Setting all weights to 0`);
-            console.log(`📅 WEEK 1 DEBUG - Setting all actualReps to 0`);
-            console.log(`📅 WEEK 1 DEBUG - Setting expectedReps to plannedReps: ${newLog.plannedReps}`);
-            console.log(`📅 WEEK 1 DEBUG - Setting all RPE to 7`);
-            
+            console.log(`🔍 DEBUG - Week 1: ${log.exercise} - No prefills, starting empty`);
             newLog.weights = Array(newLog.currentSets).fill(0);
             newLog.prefilledWeights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
             newLog.expectedReps = Array(newLog.currentSets).fill(newLog.plannedReps);
             newLog.rpe = Array(newLog.currentSets).fill(7);
+            newLog.isNewSet = Array(newLog.currentSets).fill(false); // ✅ NEW
             updatedLogs.push(ensureArrayIntegrity(newLog));
             continue;
           }
 
-          // ✅ ENHANCED: Get most recent occurrence within SAME MESOCYCLE (now prioritizes previous week)
-          const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay, mesocycleId);
-          console.log(`🔍 DEBUG - Recent data for ${log.exercise} in mesocycle ${mesocycleId}:`, recentExercise ? '✅ Found' : '❌ Not found');
+          // ✅ ENHANCED: Get most recent occurrence of this EXACT exercise (prioritizes same day for duplication handling)
+          const recentExercise = await getMostRecentExerciseData(log.exercise, log.muscleGroup, actualWeek, actualDay);
+          console.log(`🔍 DEBUG - Recent data for ${log.exercise}:`, recentExercise ? '✅ Found' : '❌ Not found');
           
+          // ✅ FIXED: Deload logic (final week - reduce to 1/3 except if 1)
           const isDeloadWeek = actualWeek === workoutData.duration_weeks;
           console.log(`🔍 DEBUG - Is deload week: ${isDeloadWeek} (week ${actualWeek}/${workoutData.duration_weeks})`);
           
           if (recentExercise) {
-            console.log(`📊 PROGRESSION DEBUG - Recent exercise data found:`, {
-              actual_sets: recentExercise.actual_sets,
-              actual_reps: recentExercise.actual_reps,
-              weight_used: recentExercise.weight_used,
-              rpe: recentExercise.rpe,
-              planned_reps: recentExercise.planned_reps,
-              week_number: recentExercise.week_number
-            });
-            
             let baseSets = Math.max(1, Number(recentExercise.actual_sets) || log.currentSets);
-            console.log(`🔍 DEBUG - Base sets from most recent in current mesocycle: ${baseSets}`);
+            console.log(`🔍 DEBUG - Base sets from most recent: ${baseSets}`);
             
             if (isDeloadWeek) {
+              // ✅ DELOAD: reduce to 1/3 of sets and reps, minimum 1
               const deloadSets = Math.max(1, Math.round(baseSets * (1/3)));
               newLog.plannedSets = deloadSets;
               newLog.currentSets = deloadSets;
               
+              // Use best reps from previous performance
               const { bestReps } = getBestSetMetrics(recentExercise.actual_reps, recentExercise.rpe);
               const deloadReps = Math.max(1, Math.round(bestReps * (1/3)));
               newLog.plannedReps = deloadReps;
               
               console.log(`🔍 DEBUG - DELOAD: ${log.exercise} - Sets: ${baseSets} → ${deloadSets}, Reps: ${bestReps} → ${deloadReps}`);
             } else {
+              // Just use base sets, muscle group adjustments will be applied later
               newLog.plannedSets = baseSets;
               newLog.currentSets = baseSets;
               console.log(`🔍 DEBUG - Base sets applied: ${log.exercise}: ${baseSets} sets`);
             }
 
-            // ALWAYS prefill weights from most recent performance within same mesocycle
+            // ✅ ENHANCED: ALWAYS prefill weights from most recent performance with comprehensive fallbacks
             const prevWeights = recentExercise.weight_used;
-            console.log(`⚖️ WEIGHT DEBUG - Previous weights from database:`, prevWeights);
-            
             if (Array.isArray(prevWeights) && prevWeights.length > 0) {
+              // Use actual weights from previous performance
               newLog.weights = Array.from({ length: newLog.currentSets }, (_, i) => {
                 const weight = Number(prevWeights[i] || prevWeights[0] || 0);
                 return Math.max(0, weight);
               });
-              newLog.prefilledWeights = [...newLog.weights];
-              console.log(`⚖️ WEIGHT DEBUG - ✅ PREFILLED weights for ${log.exercise}:`, newLog.weights);
+              newLog.prefilledWeights = [...newLog.weights]; // ✅ Store prefilled weights
+              console.log(`🔍 DEBUG - ✅ PREFILLED weights for ${log.exercise}:`, newLog.weights);
             } else {
+              // Fallback: try to extract from other formats or use defaults
               const fallbackWeight = Number(prevWeights) || 0;
               newLog.weights = Array(newLog.currentSets).fill(Math.max(0, fallbackWeight));
-              newLog.prefilledWeights = [...newLog.weights];
-              console.log(`⚖️ WEIGHT DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
+              newLog.prefilledWeights = [...newLog.weights]; // ✅ Store prefilled weights
+              console.log(`🔍 DEBUG - ⚠️ FALLBACK weights for ${log.exercise}:`, newLog.weights);
             }
 
-            // UPDATED: Enhanced RPE-based rep progression calculation with under-performance handling
+            // ✅ UPDATED: Enhanced RPE-based rep progression with underperformance check
             if (!isDeloadWeek) {
-              console.log(`💪 REP PROGRESSION DEBUG - Starting rep progression for ${log.exercise}`);
-              
               const currentWeekRPEs = Array.from({ length: newLog.currentSets }, (_, i) => 
                 getTargetRPE(actualWeek, i, newLog.currentSets)
               );
-              console.log(`💪 REP PROGRESSION DEBUG - Current week RPEs:`, currentWeekRPEs);
-              
               const prevWeekRPEs = recentExercise.rpe || [];
               const prevActualReps = recentExercise.actual_reps || [];
-              const prevExpectedReps = recentExercise.planned_reps; // This should be the expected/planned reps from previous session
+              const prevExpectedReps = recentExercise.planned_reps; // ✅ Get expected from previous week
               
-              console.log(`💪 REP PROGRESSION DEBUG - Previous week RPEs:`, prevWeekRPEs);
-              console.log(`💪 REP PROGRESSION DEBUG - Previous actual reps:`, prevActualReps);
-              console.log(`💪 REP PROGRESSION DEBUG - Previous expected reps:`, prevExpectedReps);
-              
-              newLog.plannedReps = newLog.plannedReps;
+              newLog.plannedReps = newLog.plannedReps; // Keep template default
               newLog.expectedReps = Array.from({ length: newLog.currentSets }, (_, i) => {
                 const currentRPE = currentWeekRPEs[i];
                 const prevRPE = Number(prevWeekRPEs[i]) || 7;
                 const prevActual = Number(prevActualReps[i]) || newLog.plannedReps;
                 
-                // NEW: Pass expected reps to handle under-performance
-                const prevExpected = Array.isArray(prevExpectedReps) 
-                  ? Number(prevExpectedReps[i]) || newLog.plannedReps
-                  : Number(prevExpectedReps) || newLog.plannedReps;
-                
-                console.log(`💪 REP PROGRESSION DEBUG - Set ${i + 1} calculation inputs:`);
-                console.log(`💪 REP PROGRESSION DEBUG - - prevActual: ${prevActual}`);
-                console.log(`💪 REP PROGRESSION DEBUG - - prevExpected: ${prevExpected}`);
-                console.log(`💪 REP PROGRESSION DEBUG - - prevRPE: ${prevRPE}`);
-                console.log(`💪 REP PROGRESSION DEBUG - - currentRPE: ${currentRPE}`);
-                
+                // ✅ ENHANCED: Pass expected reps for underperformance check
                 const expectedReps = calculateRepsFromRPEProgression(
                   prevActual, 
                   prevRPE, 
                   currentRPE,
-                  prevExpected  // NEW: Pass expected reps for under-performance detection
+                  prevExpectedReps // ✅ NEW: Pass expected reps for comparison
                 );
                 
-                console.log(`💪 REP PROGRESSION DEBUG - Set ${i + 1} RESULT: ${prevActual} reps (expected: ${prevExpected}) @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (from week ${recentExercise.week_number})`);
+                console.log(`🔍 DEBUG - Set ${i + 1}: ${prevActual} reps @ RPE ${prevRPE} → ${expectedReps} reps @ RPE ${currentRPE} (expected was ${prevExpectedReps})`);
                 return expectedReps;
               });
               
-              console.log(`💪 REP PROGRESSION DEBUG - ✅ ENHANCED RPE-BASED REP PROGRESSION for ${log.exercise}:`, newLog.expectedReps);
+              console.log(`🔍 DEBUG - ✅ ENHANCED RPE-BASED REP PROGRESSION for ${log.exercise}:`, newLog.expectedReps);
             }
 
+            // Initialize tracking arrays with target RPEs
             newLog.actualReps = Array(newLog.currentSets).fill(0);
             newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
               getTargetRPE(actualWeek, i, newLog.currentSets)
             );
-            
-            console.log(`🔄 EXERCISE PROCESSING DEBUG - Final RPE array for ${log.exercise}:`, newLog.rpe);
+            newLog.isNewSet = Array(newLog.currentSets).fill(false); // ✅ NEW: All template sets are not new
             
           } else {
-            console.log(`🔍 DEBUG - No previous data for ${log.exercise} in current mesocycle - using template values`);
+            console.log(`🔍 DEBUG - No previous data for ${log.exercise} - using template values`);
             
+            // Handle deload for new exercises
             if (isDeloadWeek) {
               const deloadSets = Math.max(1, Math.round(newLog.currentSets * (1/3)));
               const deloadReps = Math.max(1, Math.round(newLog.plannedReps * (1/3)));
@@ -1026,6 +966,7 @@ export function WorkoutLog() {
               console.log(`🔍 DEBUG - DELOAD (no prev): ${log.exercise} - Sets: ${log.currentSets} → ${deloadSets}, Reps: ${log.plannedReps} → ${deloadReps}`);
             }
             
+            // For week 2+, still start with empty values for new exercises
             newLog.weights = Array(newLog.currentSets).fill(0);
             newLog.prefilledWeights = Array(newLog.currentSets).fill(0);
             newLog.actualReps = Array(newLog.currentSets).fill(0);
@@ -1033,20 +974,23 @@ export function WorkoutLog() {
             newLog.rpe = Array.from({ length: newLog.currentSets }, (_, i) => 
               getTargetRPE(actualWeek, i, newLog.currentSets)
             );
-            console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values (clean mesocycle)`);
+            newLog.isNewSet = Array(newLog.currentSets).fill(false); // ✅ NEW
+            console.log(`🔍 DEBUG - New exercise in week ${actualWeek}: starting with empty values`);
           }
           
+          // ✅ NEW: Final validation to ensure data integrity
           newLog = ensureArrayIntegrity(newLog);
           
-          console.log(`🔄 EXERCISE PROCESSING DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, expected reps:`, newLog.expectedReps);
+          console.log(`🔍 DEBUG - Final ${log.exercise}: ${newLog.currentSets} sets, expected reps:`, newLog.expectedReps);
           updatedLogs.push(newLog);
         } catch (error) {
           console.error(`🔍 DEBUG - Error processing exercise ${log.exercise}:`, error);
+          // Return log with safe defaults
           updatedLogs.push(ensureArrayIntegrity(log));
         }
       }
 
-      // Apply muscle group-based set adjustments
+      // ✅ UPDATED: Apply muscle group-based set adjustments with enhanced RPE-based expected reps for new sets
       const isDeloadWeek = actualWeek === workoutData.duration_weeks;
       if (!isDeloadWeek && actualWeek >= 2) {
         for (const mg of muscleGroups) {
@@ -1058,12 +1002,13 @@ export function WorkoutLog() {
             if (mgLogs.length === 0) continue;
 
             if (adjustment > 0) {
+              // ✅ NEW: Check weekly limit before increasing
               const currentWeeklySets = weeklySetsByMuscleGroup[mg] || 0;
               const todayTotalSets = mgLogs.reduce((total, log) => total + (log?.currentSets || 0), 0);
               const projectedWeeklySets = currentWeeklySets + todayTotalSets + adjustment;
 
               if (projectedWeeklySets > 21) {
-                console.log(`🔍 DEBUG - ${mg}: Cannot increase sets. Weekly limit reached in mesocycle ${mesocycleId} (${currentWeeklySets} + ${todayTotalSets} + ${adjustment} = ${projectedWeeklySets} > 21)`);
+                console.log(`🔍 DEBUG - ${mg}: Cannot increase sets. Weekly limit reached (${currentWeeklySets} + ${todayTotalSets} + ${adjustment} = ${projectedWeeklySets} > 21)`);
                 toast({
                   title: "Weekly Set Limit Reached",
                   description: `${mg} has already reached 21 sets this week. Cannot auto-increase further.`,
@@ -1072,49 +1017,60 @@ export function WorkoutLog() {
                 continue;
               }
 
+              // Find exercise with minimum sets to increase
               const targetExercise = findExerciseForSetAdjustment(mgLogs, mg, true);
               if (targetExercise) {
                 const oldSets = targetExercise.currentSets;
                 targetExercise.currentSets += adjustment;
                 targetExercise.plannedSets = targetExercise.currentSets;
                 
+                // ✅ UPDATED: Resize arrays safely with proper tracking for new sets
                 while (targetExercise.actualReps.length < targetExercise.currentSets) {
                   targetExercise.actualReps.push(0);
                   const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
-                  targetExercise.weights.push(0); // NEW: Start with 0 for new sets
-                  targetExercise.prefilledWeights.push(0); // NEW: Start with 0 for new sets
+                  targetExercise.weights.push(Number(lastWeight) || 0);
+                  targetExercise.prefilledWeights.push(Number(lastWeight) || 0);
                   
                   const newSetIndex = targetExercise.rpe.length;
                   const newSetRPE = getTargetRPE(actualWeek, newSetIndex, targetExercise.currentSets);
                   targetExercise.rpe.push(newSetRPE);
                   
-                  // NEW: For new sets, keep expected reps empty for current week
+                  // ✅ UPDATED: New sets get expected reps but marked as new
                   const newSetExpectedReps = calculateNewSetExpectedReps(targetExercise, newSetRPE);
                   targetExercise.expectedReps.push(newSetExpectedReps);
                   
-                  console.log(`🆕 NEW SET DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE} (empty for user input)`);
+                  // ✅ NEW: Mark this set as new (added during current week)
+                  targetExercise.isNewSet = targetExercise.isNewSet || [];
+                  targetExercise.isNewSet.push(true);
+                  
+                  console.log(`🔍 DEBUG - New set ${newSetIndex + 1}: Expected ${newSetExpectedReps} reps @ RPE ${newSetRPE} (marked as new)`);
                 }
                 
+                // Ensure integrity
                 ensureArrayIntegrity(targetExercise);
                 
                 console.log(`🔍 DEBUG - INCREASED: ${targetExercise.exercise} by ${adjustment} sets (${oldSets} → ${targetExercise.currentSets} sets)`);
               }
             } else {
+              // Find exercise with maximum sets to decrease
               const targetExercise = findExerciseForSetAdjustment(mgLogs, mg, false);
               if (targetExercise) {
                 const oldSets = targetExercise.currentSets;
-                const newSets = Math.max(1, targetExercise.currentSets + adjustment);
+                const newSets = Math.max(1, targetExercise.currentSets + adjustment); // Min 1 set
                 const actualDecrease = targetExercise.currentSets - newSets;
                 
                 targetExercise.currentSets = newSets;
                 targetExercise.plannedSets = newSets;
                 
+                // Resize arrays safely
                 targetExercise.actualReps = targetExercise.actualReps.slice(0, newSets);
                 targetExercise.weights = targetExercise.weights.slice(0, newSets);
                 targetExercise.prefilledWeights = targetExercise.prefilledWeights.slice(0, newSets);
                 targetExercise.rpe = targetExercise.rpe.slice(0, newSets);
                 targetExercise.expectedReps = targetExercise.expectedReps.slice(0, newSets);
+                targetExercise.isNewSet = (targetExercise.isNewSet || []).slice(0, newSets); // ✅ NEW
                 
+                // Ensure minimum array lengths
                 ensureArrayIntegrity(targetExercise);
                 
                 console.log(`🔍 DEBUG - DECREASED: ${targetExercise.exercise} by ${actualDecrease} sets (${oldSets} → ${targetExercise.currentSets} sets)`);
@@ -1126,20 +1082,22 @@ export function WorkoutLog() {
         }
       }
 
-      console.log('🚀 INITIALIZATION DEBUG - Final initialized logs with enhanced RPE-based progression and mesocycle isolation:', updatedLogs);
+      console.log('🔍 DEBUG - Final initialized logs with enhanced RPE-based progression:', updatedLogs);
       setWorkoutLogs(updatedLogs);
       
     } catch (e) {
       console.error('🔍 DEBUG - Prefill initialization failed:', e);
+      // Fallback to empty logs
       setWorkoutLogs([]);
     }
   };
 
-  // Function to handle weight change confirmation (Week 2+ only)
+  // ✅ NEW: Function to handle weight change confirmation (Week 2+ only)
   const handleWeightChange = async (exerciseIndex: number, setIndex: number, newWeight: number) => {
     const exercise = workoutLogs[exerciseIndex];
     const originalWeight = exercise?.prefilledWeights?.[setIndex] || 0;
     
+    // ✅ NEW: Only show dialog for Week 2+ and when there's a significant change from prefilled weight
     if (currentWeek >= 2 && originalWeight > 0 && Math.abs(newWeight - originalWeight) > 0.1) {
       return new Promise<void>((resolve) => {
         setWeightChangeModal({
@@ -1160,16 +1118,18 @@ export function WorkoutLog() {
         });
       });
     } else {
+      // Week 1 or no significant change - update normally
       updateSetData(exerciseIndex, setIndex, 'weight', newWeight);
     }
   };
 
-  // Comprehensive input validation and error handling
+  // ✅ DEBUGGED: Comprehensive input validation and error handling with detailed logging
   const updateSetData = (exerciseIndex: number, setIndex: number, field: 'reps' | 'weight' | 'rpe', value: number) => {
     console.log(`🔍 DEBUG - updateSetData called: exerciseIndex=${exerciseIndex}, setIndex=${setIndex}, field="${field}", value=${value}`);
     
     setWorkoutLogs(prevLogs => {
       try {
+        // Create deep copy to avoid mutations
         const updatedLogs = [...prevLogs];
         const exerciseCopy = { ...updatedLogs[exerciseIndex] };
         
@@ -1184,15 +1144,19 @@ export function WorkoutLog() {
         console.log(`🔍 DEBUG - rpe:`, [...exerciseCopy.rpe]);
         console.log(`🔍 DEBUG - expectedReps:`, [...exerciseCopy.expectedReps]);
         
+        // Validate and sanitize input
         const validatedValue = validateNumericInput(String(value), field);
         console.log(`🔍 DEBUG - Validated value: ${validatedValue}`);
         
+        // ✅ CRITICAL FIX: Create new arrays instead of mutating
         exerciseCopy.actualReps = [...(exerciseCopy.actualReps || [])];
         exerciseCopy.weights = [...(exerciseCopy.weights || [])];
         exerciseCopy.prefilledWeights = [...(exerciseCopy.prefilledWeights || [])];
         exerciseCopy.rpe = [...(exerciseCopy.rpe || [])];
         exerciseCopy.expectedReps = [...(exerciseCopy.expectedReps || [])];
+        exerciseCopy.isNewSet = [...(exerciseCopy.isNewSet || [])]; // ✅ NEW
         
+        // Ensure arrays are properly sized
         while (exerciseCopy.actualReps.length < exerciseCopy.currentSets) {
           exerciseCopy.actualReps.push(0);
         }
@@ -1208,7 +1172,11 @@ export function WorkoutLog() {
         while (exerciseCopy.expectedReps.length < exerciseCopy.currentSets) {
           exerciseCopy.expectedReps.push(exerciseCopy.plannedReps);
         }
+        while (exerciseCopy.isNewSet.length < exerciseCopy.currentSets) {
+          exerciseCopy.isNewSet.push(false);
+        }
         
+        // Update the specific field in the NEW arrays
         if (field === 'reps') {
           exerciseCopy.actualReps[setIndex] = validatedValue;
         } else if (field === 'weight') {
@@ -1217,8 +1185,10 @@ export function WorkoutLog() {
           exerciseCopy.rpe[setIndex] = validatedValue;
         }
         
+        // Update completion status
         exerciseCopy.completed = isExerciseCompleted(exerciseCopy);
         
+        // Replace the exercise object in the copied logs array
         updatedLogs[exerciseIndex] = exerciseCopy;
         
         console.log(`🔍 DEBUG - AFTER UPDATE for ${exerciseCopy.exercise}:`);
@@ -1237,67 +1207,56 @@ export function WorkoutLog() {
     });
   };
 
-  // UPDATED: Safe set management with validation (new sets start empty for current week)
+  // ✅ UPDATED: Enhanced set management with proper new set tracking
   const addSet = (exerciseIndex: number) => {
-    console.log(`➕ ADD SET DEBUG - addSet called for exercise index ${exerciseIndex}`);
-    
     setWorkoutLogs(prevLogs => {
       try {
         const updatedLogs = [...prevLogs];
         const exercise = updatedLogs[exerciseIndex];
         
         if (!exercise || exercise.currentSets >= 20) {
-          console.warn(`➕ ADD SET DEBUG - Cannot add set: invalid exercise or too many sets`);
+          console.warn(`🔍 DEBUG - Cannot add set: invalid exercise or too many sets`);
           return prevLogs;
         }
         
-        console.log(`➕ ADD SET DEBUG - BEFORE adding set to ${exercise.exercise}:`);
-        console.log(`➕ ADD SET DEBUG - currentSets: ${exercise.currentSets}`);
-        console.log(`➕ ADD SET DEBUG - actualReps: [${exercise.actualReps}]`);
-        console.log(`➕ ADD SET DEBUG - weights: [${exercise.weights}]`);
-        console.log(`➕ ADD SET DEBUG - expectedReps: [${exercise.expectedReps}]`);
-        console.log(`➕ ADD SET DEBUG - rpe: [${exercise.rpe}]`);
-        
         exercise.currentSets++;
-        exercise.actualReps.push(0); // NEW: Always start with 0 (user will enter)
+        exercise.actualReps.push(0);
+        exercise.weights.push(exercise.weights[exercise.weights.length - 1] || 0);
+        exercise.prefilledWeights.push(exercise.prefilledWeights[exercise.prefilledWeights.length - 1] || 0);
         
-        // NEW: For new sets, weights start empty (0) - user must enter
-        exercise.weights.push(0);
-        exercise.prefilledWeights.push(0);
-        
+        // ✅ NEW SETS get proper RPE for current week and position
         const newSetIndex = exercise.rpe.length;
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
-        console.log(`➕ ADD SET DEBUG - New set RPE calculation:`);
-        console.log(`➕ ADD SET DEBUG - currentWeek: ${currentWeek}`);
-        console.log(`➕ ADD SET DEBUG - newSetIndex: ${newSetIndex}`);
-        console.log(`➕ ADD SET DEBUG - exercise.currentSets: ${exercise.currentSets}`);
-        console.log(`➕ ADD SET DEBUG - calculated RPE: ${newSetRPE}`);
-        
-        // NEW: For new sets in current week, expected reps are empty (0)
-        const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
+        // ✅ UPDATED: New sets added during current week stay empty (0 expected reps)
+        // From next week onwards, they get proper progression calculations
+        let newSetExpectedReps;
+        if (currentWeek === 1) {
+          // Week 1: Use planned reps
+          newSetExpectedReps = exercise.plannedReps;
+        } else {
+          // Week 2+: Calculate based on existing sets (but will stay empty for current week)
+          newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
+        }
         exercise.expectedReps.push(newSetExpectedReps);
+        
+        // ✅ NEW: Mark this set as newly added during current week
+        exercise.isNewSet = exercise.isNewSet || [];
+        exercise.isNewSet.push(true);
         
         exercise.completed = false;
         
-        console.log(`➕ ADD SET DEBUG - AFTER adding set to ${exercise.exercise}:`);
-        console.log(`➕ ADD SET DEBUG - currentSets: ${exercise.currentSets}`);
-        console.log(`➕ ADD SET DEBUG - actualReps: [${exercise.actualReps}]`);
-        console.log(`➕ ADD SET DEBUG - weights: [${exercise.weights}]`);
-        console.log(`➕ ADD SET DEBUG - expectedReps: [${exercise.expectedReps}]`);
-        console.log(`➕ ADD SET DEBUG - rpe: [${exercise.rpe}]`);
-        console.log(`➕ ADD SET DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps (empty for user) to ${exercise.exercise}`);
-        
+        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} and expected ${newSetExpectedReps} reps to ${exercise.exercise} (marked as new: ${true})`);
         return updatedLogs;
       } catch (error) {
-        console.error('➕ ADD SET DEBUG - Error adding set:', error);
+        console.error('🔍 DEBUG - Error adding set:', error);
         return prevLogs;
       }
     });
   };
 
-  // Safe set removal with validation
+  // ✅ ENHANCED: Safe set removal with validation
   const removeSet = (exerciseIndex: number) => {
     setWorkoutLogs(prevLogs => {
       try {
@@ -1315,6 +1274,10 @@ export function WorkoutLog() {
         exercise.prefilledWeights.pop();
         exercise.rpe.pop();
         exercise.expectedReps.pop();
+        // ✅ NEW: Also remove from isNewSet tracking
+        if (exercise.isNewSet && exercise.isNewSet.length > 0) {
+          exercise.isNewSet.pop();
+        }
         exercise.completed = false;
         
         return updatedLogs;
@@ -1337,6 +1300,7 @@ export function WorkoutLog() {
           return false;
         }
         
+        // Week 1 requires RPE input, other weeks don't
         if (currentWeek === 1) {
           const rpe = exercise.rpe?.[i];
           if (!rpe || rpe < 1 || rpe > 10) {
@@ -1389,12 +1353,12 @@ export function WorkoutLog() {
     }
   };
 
-  // UPDATED: Save muscle group feedback with mesocycle_id
   const saveMuscleGroupFeedback = async () => {
     try {
       const { muscleGroup, exercises } = feedbackModal;
-      console.log('Saving MPC feedback for:', muscleGroup, 'in mesocycle:', currentMesocycleId);
+      console.log('Saving MPC feedback for:', muscleGroup);
       
+      // Store feedback using functional state updates
       setMuscleGroupFeedbacks(prev => {
         const copy = new Map(prev);
         copy.set(muscleGroup, feedback);
@@ -1402,26 +1366,24 @@ export function WorkoutLog() {
       });
       setCompletedMuscleGroups(prev => new Set([...prev, muscleGroup]));
       
-      // UPDATED: Save pump feedback with mesocycle_id
+      // Save pump feedback with error handling
       try {
         await supabase.from('pump_feedback').insert({
           user_id: user.id,
           workout_date: new Date().toISOString().split('T')[0],
           muscle_group: muscleGroup,
-          pump_level: feedback.pumpLevel,
-          mesocycle_id: currentMesocycleId
+          pump_level: feedback.pumpLevel
         });
       } catch (error) {
         console.error('Failed to save pump feedback:', error);
       }
       
-      // UPDATED: Save all exercises with mesocycle_id
+      // Save all exercises in this muscle group to mesocycle
       for (const exercise of exercises) {
         try {
           await supabase.from('mesocycle').insert({
             user_id: user.id,
             plan_id: workoutId,
-            mesocycle_id: currentMesocycleId,
             workout_name: workout.name,
             week_number: currentWeek,
             day_number: currentDay,
@@ -1447,6 +1409,7 @@ export function WorkoutLog() {
 
       setFeedbackModal({ isOpen: false, muscleGroup: '', exercises: [] });
       
+      // Check if all muscle groups are completed
       const allMuscleGroups = getUniqueMuscleGroups();
       const updatedCompletedGroups = new Set(completedMuscleGroups).add(muscleGroup);
       
@@ -1470,6 +1433,7 @@ export function WorkoutLog() {
 
   const completeWorkoutDay = async () => {
     try {
+      // Mark workout as completed
       await supabase.from('workout_calendar').insert({
         user_id: user.id,
         workout_date: new Date().toISOString().split('T')[0],
@@ -1488,6 +1452,7 @@ export function WorkoutLog() {
         }
       });
 
+      // Progress to next day/week
       const structure = workout.workout_structure;
       const maxDays = Object.keys(structure).filter(dayKey => {
         const dayWorkout = structure[dayKey];
@@ -1505,9 +1470,9 @@ export function WorkoutLog() {
           updated_at: new Date().toISOString()
         })
         .eq('user_id', user.id)
-        .eq('workout_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId);
+        .eq('workout_id', workoutId);
 
+      // Check if mesocycle is complete
       if (nextWeek > workout.duration_weeks) {
         await saveCompletedMesocycle();
         
@@ -1536,7 +1501,6 @@ export function WorkoutLog() {
     }
   };
 
-  // UPDATED: Save completed mesocycle and clean up old data
   const saveCompletedMesocycle = async () => {
     try {
       const { data: activeWorkout } = await supabase
@@ -1544,7 +1508,6 @@ export function WorkoutLog() {
         .select('*')
         .eq('user_id', user.id)
         .eq('workout_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId)
         .maybeSingle();
 
       if (!activeWorkout) return;
@@ -1553,8 +1516,7 @@ export function WorkoutLog() {
         .from('mesocycle')
         .select('*')
         .eq('user_id', user.id)
-        .eq('plan_id', workoutId)
-        .eq('mesocycle_id', currentMesocycleId);
+        .eq('plan_id', workoutId);
 
       await supabase
         .from('completed_mesocycles')
@@ -1568,22 +1530,15 @@ export function WorkoutLog() {
           total_days: workout.days_per_week * workout.duration_weeks,
           mesocycle_data: {
             workouts: mesocycleData || [],
-            workout_structure: workout.workout_structure,
-            mesocycle_id: currentMesocycleId
+            workout_structure: workout.workout_structure
           }
         });
 
-      // Clean up completed mesocycle data to prevent cross-contamination
-      console.log(`🔍 DEBUG - Cleaning up completed mesocycle data for mesocycle_id: ${currentMesocycleId}`);
-      
-      await Promise.all([
-        supabase.from('mesocycle').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId),
-        supabase.from('pump_feedback').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId),
-        supabase.from('muscle_soreness').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId),
-        supabase.from('active_workouts').delete().eq('user_id', user.id).eq('mesocycle_id', currentMesocycleId)
-      ]);
-
-      console.log(`🔍 DEBUG - Successfully cleaned up mesocycle data for mesocycle_id: ${currentMesocycleId}`);
+      await supabase
+        .from('active_workouts')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('workout_id', workoutId);
     } catch (error) {
       console.error('Error saving completed mesocycle:', error);
     }
@@ -1629,8 +1584,6 @@ export function WorkoutLog() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold">Day {currentDay} - Workout Log</h1>
               <p className="text-muted-foreground text-sm sm:text-base">{workout.name} - Week {currentWeek}</p>
-              {/* Show mesocycle ID for debugging */}
-              <p className="text-xs text-muted-foreground">Mesocycle: {currentMesocycleId.slice(0, 8)}...</p>
               {currentWeek === workout.duration_weeks && (
                 <Badge variant="secondary" className="mt-1">DELOAD WEEK</Badge>
               )}
@@ -1675,6 +1628,7 @@ export function WorkoutLog() {
                             <h3 className="font-semibold text-base sm:text-lg truncate">{exercise.exercise}</h3>
                           </div>
                         
+                          {/* ✅ UPDATED: Removed "Target Reps" text as requested */}
                           <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
                             <div className="flex gap-2">
                               <Button
@@ -1710,20 +1664,19 @@ export function WorkoutLog() {
                             {Array.from({ length: exercise.currentSets }).map((_, setIndex) => {
                               const targetRPE = getTargetRPE(currentWeek, setIndex, exercise.currentSets);
                               const expectedReps = exercise.expectedReps?.[setIndex] || exercise.plannedReps;
-                              
-                              console.log(`🎯 UI DEBUG - Rendering set ${setIndex + 1} for ${exercise.exercise}:`);
-                              console.log(`🎯 UI DEBUG - currentWeek: ${currentWeek}`);
-                              console.log(`🎯 UI DEBUG - setIndex: ${setIndex}`);
-                              console.log(`🎯 UI DEBUG - exercise.currentSets: ${exercise.currentSets}`);
-                              console.log(`🎯 UI DEBUG - targetRPE: ${targetRPE}`);
-                              console.log(`🎯 UI DEBUG - expectedReps: ${expectedReps}`);
+                              const isNewSetForCurrentWeek = exercise.isNewSet?.[setIndex] || false; // ✅ NEW
                               
                               return (
                                 <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
                                   <div className="flex items-center justify-between mb-2">
                                     <Label className="text-xs sm:text-sm font-medium">
                                       Set {setIndex + 1}
+                                      {/* ✅ NEW: Show indicator for new sets */}
+                                      {isNewSetForCurrentWeek && (
+                                        <Badge variant="outline" className="ml-1 text-xs">NEW</Badge>
+                                      )}
                                     </Label>
+                                    {/* ✅ RPE Target Badge for Week 2+ */}
                                     {currentWeek > 1 && (
                                       <Badge variant="outline" className="text-xs">
                                         RPE {targetRPE}
@@ -1731,19 +1684,12 @@ export function WorkoutLog() {
                                     )}
                                   </div>
                                   
-                                  <div className="text-xs text-muted-foreground mb-2">
-                                    {/* UPDATED: Show different text based on conditions */}
-                                    {currentWeek === 1 ? (
-                                      // Week 1: Don't show expected reps
-                                      ''
-                                    ) : expectedReps === 0 ? (
-                                      // New sets with 0 expected reps
-                                      'Enter your reps'
-                                    ) : (
-                                      // Normal sets with expected reps
-                                      `Expected: ${expectedReps} reps`
-                                    )}
-                                  </div>
+                                  {/* ✅ UPDATED: Expected Reps Indicator - don't show for new sets in current week */}
+                                  {!isNewSetForCurrentWeek && (
+                                    <div className="text-xs text-muted-foreground mb-2">
+                                      Expected: {expectedReps} reps
+                                    </div>
+                                  )}
                                   
                                   <div className="space-y-2">
                                     <div>
@@ -1765,11 +1711,13 @@ export function WorkoutLog() {
                                         max="999"
                                         step="0.5"
                                         onKeyDown={(e) => {
+                                          // ✅ Prevent scroll behavior for weight input
                                           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                                             e.preventDefault();
                                           }
                                         }}
                                         onKeyPress={(e) => {
+                                          // Allow only numbers and decimal point
                                           if (!/[0-9.]/.test(e.key) && e.key !== 'Backspace') {
                                             e.preventDefault();
                                           }
@@ -1780,15 +1728,12 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Reps
                                       </Label>
+                                      {/* ✅ UPDATED: Reps input now behaves like weight input (no scroll) */}
                                       <Input
                                         type="number"
                                         value={exercise.actualReps?.[setIndex] || ''}
                                         autoComplete="off"
-                                        placeholder={
-                                          currentWeek === 1 ? "" : 
-                                          expectedReps === 0 ? "" : 
-                                          String(expectedReps)
-                                        }
+                                        placeholder={isNewSetForCurrentWeek ? "" : String(expectedReps)}
                                         onChange={(e) => {
                                           console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
                                           const value = validateNumericInput(e.target.value, 'reps');
@@ -1798,17 +1743,20 @@ export function WorkoutLog() {
                                         min="1"
                                         max="100"
                                         onKeyDown={(e) => {
+                                          // ✅ NEW: Prevent scroll behavior for reps input (like weight input)
                                           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                                             e.preventDefault();
                                           }
                                         }}
                                         onKeyPress={(e) => {
+                                          // Allow only numbers
                                           if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
                                             e.preventDefault();
                                           }
                                         }}
                                       />
                                     </div>
+                                    {/* ✅ Week 1: Disabled RPE input showing 7, Week 2+: No RPE input */}
                                     {currentWeek === 1 && (
                                       <div>
                                         <div className="flex items-center gap-1 mb-1">
@@ -1847,7 +1795,7 @@ export function WorkoutLog() {
           })}
         </div>
 
-        {/* Weight Change Confirmation Modal */}
+        {/* ✅ Weight Change Confirmation Modal (Week 2+ only) */}
         <Dialog open={weightChangeModal.isOpen} onOpenChange={() => {}}>
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
@@ -1880,7 +1828,7 @@ export function WorkoutLog() {
           </DialogContent>
         </Dialog>
 
-        {/* RPE Information Modal */}
+        {/* ✅ RPE Information Modal */}
         <Dialog open={rpeInfoModal} onOpenChange={setRpeInfoModal}>
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
@@ -1955,7 +1903,7 @@ export function WorkoutLog() {
           </DialogContent>
         </Dialog>
 
-        {/* SC (Soreness) Modal */}
+        {/* ✅ SC (Soreness) Modal with proper value reset */}
         <Dialog open={scModal.isOpen} onOpenChange={() => {}}>
           <DialogContent className="max-w-sm sm:max-w-md mx-4">
             <DialogHeader>
