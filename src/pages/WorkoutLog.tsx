@@ -332,6 +332,7 @@ export function WorkoutLog() {
         const currentGroup = muscleGroups[i];
         console.log(`🔍 DEBUG - Processing soreness for: ${currentGroup} (${i + 1}/${muscleGroups.length})`);
         
+        // Reset soreness value for each muscle group
         setCurrentSorenessValue('');
         
         const result = await new Promise<string | null>((resolve, reject) => {
@@ -359,7 +360,9 @@ export function WorkoutLog() {
         
         console.log(`🔍 DEBUG - Closing modal for ${currentGroup}`);
         setScModal(prev => ({ ...prev, isOpen: false }));
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Clear the current value before moving to next muscle group
+        setCurrentSorenessValue('');
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
     } catch (error) {
       console.error('🔍 DEBUG - Soreness prompting failed:', error);
@@ -1157,35 +1160,20 @@ export function WorkoutLog() {
         }
         
         exercise.currentSets++;
+        // New sets should have empty reps (0 means empty/unset)
         exercise.actualReps.push(0);
         
-        // ✅ FIXED ISSUE 1: For current week, keep weight empty. For future weeks, prefill from last set.
-        const isCurrentWeek = true; // This function is only called during current workout
-        if (isCurrentWeek) {
-          // Keep weight empty for new sets added during current week
-          exercise.weights.push(0);
-          exercise.prefilledWeights.push(0);
-          console.log(`🔍 DEBUG - Added set with EMPTY weight for current week exercise: ${exercise.exercise}`);
-        } else {
-          // For future weeks (this branch won't execute in current implementation, but kept for completeness)
-          const lastWeight = exercise.weights[exercise.weights.length - 1] || 0;
-          exercise.weights.push(lastWeight);
-          exercise.prefilledWeights.push(lastWeight);
-          console.log(`🔍 DEBUG - Added set with prefilled weight: ${lastWeight}`);
-        }
+        // New sets should have empty weight (0 means empty/unset)
+        exercise.weights.push(0);
+        exercise.prefilledWeights.push(0);
+        console.log(`🔍 DEBUG - Added set with EMPTY weight and reps for exercise: ${exercise.exercise}`);
         
         const newSetIndex = exercise.rpe.length;
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
-        // For current week, keep expected reps empty (will show as placeholder)
-        if (isCurrentWeek) {
-          exercise.expectedReps.push(exercise.plannedReps);
-        } else {
-          // For future weeks, calculate based on best set performance
-          const newSetExpectedReps = calculateNewSetExpectedReps(exercise, newSetRPE);
-          exercise.expectedReps.push(newSetExpectedReps);
-        }
+        // Expected reps for the new set
+        exercise.expectedReps.push(exercise.plannedReps);
         
         exercise.completed = false;
         
@@ -1634,60 +1622,60 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Weight ({weightUnit})
                                       </Label>
-                                      <Input
-                                        type="number"
-                                        value={exercise.weights?.[setIndex] || ''}
-                                        autoComplete="off"
-                                        placeholder={currentWeek === 1 ? "" : "Previous weight"}
-                                        onChange={async (e) => {
-                                          console.log(`🔍 DEBUG - Weight input onChange: "${e.target.value}"`);
-                                          const value = validateNumericInput(e.target.value, 'weight');
-                                          await handleWeightChange(originalIndex, setIndex, value);
-                                        }}
-                                        className="h-8 text-sm"
-                                        min="0"
-                                        max="999"
-                                        step="0.5"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                            e.preventDefault();
-                                          }
-                                        }}
-                                        onKeyPress={(e) => {
-                                          if (!/[0-9.]/.test(e.key) && e.key !== 'Backspace') {
-                                            e.preventDefault();
-                                          }
-                                        }}
-                                      />
+                                       <Input
+                                         type="number"
+                                         value={exercise.weights?.[setIndex] === 0 ? '' : exercise.weights?.[setIndex] || ''}
+                                         autoComplete="off"
+                                         placeholder={currentWeek === 1 ? "" : "Previous weight"}
+                                         onChange={async (e) => {
+                                           console.log(`🔍 DEBUG - Weight input onChange: "${e.target.value}"`);
+                                           const value = validateNumericInput(e.target.value, 'weight');
+                                           await handleWeightChange(originalIndex, setIndex, value);
+                                         }}
+                                         className="h-8 text-sm"
+                                         min="0"
+                                         max="999"
+                                         step="0.5"
+                                         onKeyDown={(e) => {
+                                           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                             e.preventDefault();
+                                           }
+                                         }}
+                                         onKeyPress={(e) => {
+                                           if (!/[0-9.]/.test(e.key) && e.key !== 'Backspace') {
+                                             e.preventDefault();
+                                           }
+                                         }}
+                                       />
                                     </div>
                                     <div>
                                       <Label className="text-xs text-muted-foreground">
                                         Reps
                                       </Label>
-                                      <Input
-                                        type="number"
-                                        value={exercise.actualReps?.[setIndex] || ''}
-                                        autoComplete="off"
-                                        placeholder={String(expectedReps)}
-                                        onChange={(e) => {
-                                          console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
-                                          const value = validateNumericInput(e.target.value, 'reps');
-                                          updateSetData(originalIndex, setIndex, 'reps', value);
-                                        }}
-                                        className="h-8 text-sm"
-                                        min="1"
-                                        max="100"
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                            e.preventDefault();
-                                          }
-                                        }}
-                                        onKeyPress={(e) => {
-                                          if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
-                                            e.preventDefault();
-                                          }
-                                        }}
-                                      />
+                                       <Input
+                                         type="number"
+                                         value={exercise.actualReps?.[setIndex] === 0 ? '' : exercise.actualReps?.[setIndex] || ''}
+                                         autoComplete="off"
+                                         placeholder={String(expectedReps)}
+                                         onChange={(e) => {
+                                           console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
+                                           const value = validateNumericInput(e.target.value, 'reps');
+                                           updateSetData(originalIndex, setIndex, 'reps', value);
+                                         }}
+                                         className="h-8 text-sm"
+                                         min="1"
+                                         max="100"
+                                         onKeyDown={(e) => {
+                                           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                             e.preventDefault();
+                                           }
+                                         }}
+                                         onKeyPress={(e) => {
+                                           if (!/[0-9]/.test(e.key) && e.key !== 'Backspace') {
+                                             e.preventDefault();
+                                           }
+                                         }}
+                                       />
                                     </div>
                                     {currentWeek === 1 && (
                                       <div>
