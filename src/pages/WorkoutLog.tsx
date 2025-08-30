@@ -1338,8 +1338,8 @@ export function WorkoutLog() {
               weight_used: exercise.weights,
               weight_unit: weightUnit,
               rpe: exercise.rpe,
-              rir: exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length,
-              pump_level: feedback.pumpLevel,
+              rir: Math.round(exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length),
+              pump_level: feedback.pumpLevel === 'none' ? 'negligible' : feedback.pumpLevel === 'medium' ? 'moderate' : feedback.pumpLevel,
               is_sore: false,
               can_add_sets: false,
               feedback_given: true
@@ -1409,8 +1409,8 @@ export function WorkoutLog() {
               weight_used: exercise.weights,
               weight_unit: weightUnit,
               rpe: exercise.rpe,
-              rir: exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length,
-              pump_level: pumpLevel,
+              rir: Math.round(exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length),
+              pump_level: pumpLevel === 'none' ? 'negligible' : pumpLevel === 'medium' ? 'moderate' : pumpLevel,
               is_sore: false,
               can_add_sets: false,
               feedback_given: muscleGroupFeedbacks.has(exercise.muscleGroup)
@@ -1425,7 +1425,7 @@ export function WorkoutLog() {
         }
       }
 
-      await supabase.from('workout_calendar').insert({
+      await supabase.from('workout_calendar').upsert({
         user_id: user.id,
         workout_date: new Date().toISOString().split('T')[0],
         status: 'completed',
@@ -1441,7 +1441,7 @@ export function WorkoutLog() {
             pump_level: fb.pumpLevel
           }))
         }
-      });
+      }, { onConflict: 'user_id,workout_date' });
 
       const structure = workout.workout_structure;
       const maxDays = Object.keys(structure).filter(dayKey => {
