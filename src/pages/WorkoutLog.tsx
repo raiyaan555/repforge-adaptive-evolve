@@ -709,24 +709,9 @@ export function WorkoutLog() {
             shouldAsk = false;
           }
         } else if (actualWeek >= 2) {
-          // Week 2+ → check if muscle group was trained in any previous days IN SAME MESOCYCLE
-          console.log(`🔍 DEBUG - Week ${actualWeek}: Checking any previous training for ${mg} in mesocycle ${mesocycleId}`);
-          try {
-            const { data: anyPrevious } = await supabase
-              .from('mesocycle')
-              .select('id, week_number, day_number')
-              .eq('user_id', user.id)
-              .eq('plan_id', workoutId)
-              .eq('mesocycle_id', mesocycleId)
-              .eq('muscle_group', mg)
-              .or(`week_number.lt.${actualWeek},and(week_number.eq.${actualWeek},day_number.lt.${actualDay})`);
-            
-            console.log(`🔍 DEBUG - Found ${(anyPrevious || []).length} previous sessions for ${mg} in current mesocycle:`, anyPrevious);
-            shouldAsk = (anyPrevious || []).length > 0;
-          } catch (error) {
-            console.error('🔍 DEBUG - Error checking previous sessions:', error);
-            shouldAsk = false;
-          }
+          // Week 2+ → always ask for soreness for all muscle groups in today's workout
+          console.log(`🔍 DEBUG - Week ${actualWeek}: Always asking for soreness for ${mg} (week 2+)`);
+          shouldAsk = true;
         }
         
         if (shouldAsk) {
