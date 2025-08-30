@@ -38,6 +38,7 @@ interface WorkoutLog {
   rpe: number[];
   completed: boolean;
   currentSets: number;
+  newSets?: boolean[]; // Track which sets are manually added
 }
 
 interface MuscleGroupFeedback {
@@ -169,12 +170,17 @@ export function WorkoutLog() {
     correctedExercise.rpe = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.rpe[i] || getTargetRPE(currentWeek, i, targetLength)
     );
-    // Don't display expected reps for week 1
+    // Don't display expected reps for week 1 or new sets
     correctedExercise.expectedReps = currentWeek === 1 ? 
       Array.from({ length: targetLength }, () => 0) :
       Array.from({ length: targetLength }, (_, i) => 
         correctedExercise.expectedReps[i] || correctedExercise.plannedReps
       );
+    
+    // Initialize newSets array if not present
+    correctedExercise.newSets = Array.from({ length: targetLength }, (_, i) => 
+      correctedExercise.newSets?.[i] || false
+    );
     
     return correctedExercise;
   };
@@ -1175,12 +1181,16 @@ export function WorkoutLog() {
         const newSetRPE = getTargetRPE(currentWeek, newSetIndex, exercise.currentSets);
         exercise.rpe.push(newSetRPE);
         
-        // Expected reps for the new set
-        exercise.expectedReps.push(exercise.plannedReps);
+        // Expected reps for the new set - set to 0 for new sets (no expected reps)
+        exercise.expectedReps.push(0);
+        
+        // Mark this set as new
+        if (!exercise.newSets) exercise.newSets = Array(exercise.currentSets - 1).fill(false);
+        exercise.newSets.push(true);
         
         exercise.completed = false;
         
-        console.log(`🔍 DEBUG - Added set ${exercise.currentSets} with RPE ${newSetRPE} to ${exercise.exercise}`);
+        console.log(`🔍 DEBUG - Added NEW set ${exercise.currentSets} with RPE ${newSetRPE} to ${exercise.exercise}`);
         return updatedLogs;
       } catch (error) {
         console.error('🔍 DEBUG - Error adding set:', error);
@@ -1207,6 +1217,8 @@ export function WorkoutLog() {
         exercise.prefilledWeights.pop();
         exercise.rpe.pop();
         exercise.expectedReps.pop();
+        // Also remove from newSets array
+        if (exercise.newSets) exercise.newSets.pop();
         exercise.completed = false;
         
         return updatedLogs;
@@ -1602,6 +1614,8 @@ export function WorkoutLog() {
                             {Array.from({ length: exercise.currentSets }).map((_, setIndex) => {
                               const targetRPE = getTargetRPE(currentWeek, setIndex, exercise.currentSets);
                               const expectedReps = exercise.expectedReps?.[setIndex] || exercise.plannedReps;
+                              const isNewSet = exercise.newSets?.[setIndex] || false;
+                              const isWeek1OrNewSet = currentWeek === 1 || isNewSet;
                               
                               return (
                                 <div key={setIndex} className="border rounded p-2 sm:p-3 bg-card">
@@ -1609,14 +1623,21 @@ export function WorkoutLog() {
                                     <Label className="text-xs sm:text-sm font-medium">
                                       Set {setIndex + 1}
                                     </Label>
-                                    {currentWeek > 1 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        RPE {targetRPE}
-                                      </Badge>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                      {isNewSet && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          New
+                                        </Badge>
+                                      )}
+                                      {!isWeek1OrNewSet && (
+                                        <Badge variant="outline" className="text-xs">
+                                          RPE {targetRPE}
+                                        </Badge>
+                                      )}
+                                    </div>
                                   </div>
                                   
-                                   {currentWeek > 1 && (
+                                   {!isWeek1OrNewSet && (
                                      <div className="text-xs text-muted-foreground mb-2">
                                        Expected: {expectedReps} reps
                                      </div>
@@ -1627,20 +1648,20 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Weight ({weightUnit})
                                       </Label>
-                                       <Input
-                                         type="number"
-                                         value={exercise.weights?.[setIndex] === 0 ? '' : exercise.weights?.[setIndex] || ''}
-                                         autoComplete="off"
-                                         placeholder={currentWeek === 1 ? "" : "Previous weight"}
-                                         onChange={async (e) => {
-                                           console.log(`🔍 DEBUG - Weight input onChange: "${e.target.value}"`);
-                                           const value = validateNumericInput(e.target.value, 'weight');
-                                           await handleWeightChange(originalIndex, setIndex, value);
-                                         }}
-                                         className="h-8 text-sm"
-                                         min="0"
-                                         max="999"
-                                         step="0.5"
+                                        <Input
+                                          type="number"
+                                          value={exercise.weights?.[setIndex] === 0 ? '' : exercise.weights?.[setIndex] || ''}
+                                          autoComplete="off"
+                                          placeholder={isWeek1OrNewSet ? "" : "Previous weight"}
+                                          onChange={async (e) => {
+                                            console.log(`🔍 DEBUG - Weight input onChange: "${e.target.value}"`);
+                                            const value = validateNumericInput(e.target.value, 'weight');
+                                            await handleWeightChange(originalIndex, setIndex, value);
+                                          }}
+                                          className="h-8 text-sm"
+                                          min="0"
+                                          max="999"
+                                          step="0.5"
                                          onKeyDown={(e) => {
                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                                              e.preventDefault();
@@ -1661,7 +1682,7 @@ export function WorkoutLog() {
                                           type="number"
                                           value={exercise.actualReps?.[setIndex] === 0 ? '' : exercise.actualReps?.[setIndex] || ''}
                                           autoComplete="off"
-                                          placeholder={currentWeek === 1 ? '' : String(expectedReps)}
+                                          placeholder={isWeek1OrNewSet ? '' : String(expectedReps)}
                                           onChange={(e) => {
                                             console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
                                             const value = validateNumericInput(e.target.value, 'reps');
@@ -1682,7 +1703,7 @@ export function WorkoutLog() {
                                          }}
                                        />
                                     </div>
-                                    {currentWeek === 1 && (
+                                    {isWeek1OrNewSet && (
                                       <div>
                                         <div className="flex items-center gap-1 mb-1">
                                           <Label className="text-xs text-muted-foreground">
