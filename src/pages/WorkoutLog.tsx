@@ -1304,33 +1304,52 @@ export function WorkoutLog() {
         console.error('Failed to save pump feedback:', error);
       }
       
-      // UPDATED: Save all exercises with mesocycle_id
+      // UPDATED: Save individual exercises only if not already saved (avoid duplicates)
+      // Check if exercises were already saved during workout day completion
+      const existingExercises = await supabase
+        .from('mesocycle')
+        .select('exercise_name')
+        .eq('user_id', user.id)
+        .eq('plan_id', workoutId)
+        .eq('mesocycle_id', currentMesocycleId)
+        .eq('week_number', currentWeek)
+        .eq('day_number', currentDay)
+        .eq('muscle_group', muscleGroup);
+      
+      const alreadySavedExercises = new Set(existingExercises.data?.map(e => e.exercise_name) || []);
+      
       for (const exercise of exercises) {
-        try {
-          await supabase.from('mesocycle').insert({
-            user_id: user.id,
-            plan_id: workoutId,
-            mesocycle_id: currentMesocycleId,
-            workout_name: workout.name,
-            week_number: currentWeek,
-            day_number: currentDay,
-            exercise_name: exercise.exercise,
-            muscle_group: exercise.muscleGroup,
-            planned_sets: exercise.plannedSets,
-            planned_reps: exercise.plannedReps,
-            actual_sets: exercise.currentSets,
-            actual_reps: exercise.actualReps,
-            weight_used: exercise.weights,
-            weight_unit: weightUnit,
-            rpe: exercise.rpe,
-            rir: exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length,
-            pump_level: feedback.pumpLevel,
-            is_sore: false,
-            can_add_sets: false,
-            feedback_given: true
-          });
-        } catch (error) {
-          console.error(`Failed to save exercise ${exercise.exercise}:`, error);
+        // Only save if not already saved
+        if (!alreadySavedExercises.has(exercise.exercise)) {
+          try {
+            await supabase.from('mesocycle').insert({
+              user_id: user.id,
+              plan_id: workoutId,
+              mesocycle_id: currentMesocycleId,
+              workout_name: workout.name,
+              week_number: currentWeek,
+              day_number: currentDay,
+              exercise_name: exercise.exercise,
+              muscle_group: exercise.muscleGroup,
+              planned_sets: exercise.plannedSets,
+              planned_reps: exercise.plannedReps,
+              actual_sets: exercise.currentSets,
+              actual_reps: exercise.actualReps,
+              weight_used: exercise.weights,
+              weight_unit: weightUnit,
+              rpe: exercise.rpe,
+              rir: exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length,
+              pump_level: feedback.pumpLevel,
+              is_sore: false,
+              can_add_sets: false,
+              feedback_given: true
+            });
+            console.log(`🔍 DEBUG - Saved new exercise: ${exercise.exercise}`);
+          } catch (error) {
+            console.error(`Failed to save exercise ${exercise.exercise}:`, error);
+          }
+        } else {
+          console.log(`🔍 DEBUG - Exercise ${exercise.exercise} already saved, skipping`);
         }
       }
 
@@ -1359,6 +1378,53 @@ export function WorkoutLog() {
 
   const completeWorkoutDay = async () => {
     try {
+      // UPDATED: Save ALL exercises from the workout, not just completed muscle groups
+      console.log('🔍 DEBUG - Saving ALL exercises from workout day...');
+      
+      for (const exercise of workoutLogs) {
+        // Only save exercises that have at least some data entered
+        const hasData = exercise.actualReps.some(rep => rep > 0) || exercise.weights.some(weight => weight > 0);
+        
+        if (hasData) {
+          try {
+            console.log(`🔍 DEBUG - Saving exercise: ${exercise.exercise} (${exercise.muscleGroup})`);
+            
+            // Get muscle group feedback if available, otherwise use defaults
+            const muscleGroupFeedback = muscleGroupFeedbacks.get(exercise.muscleGroup);
+            const pumpLevel = muscleGroupFeedback?.pumpLevel || 'medium';
+            
+            await supabase.from('mesocycle').insert({
+              user_id: user.id,
+              plan_id: workoutId,
+              mesocycle_id: currentMesocycleId,
+              workout_name: workout.name,
+              week_number: currentWeek,
+              day_number: currentDay,
+              exercise_name: exercise.exercise,
+              muscle_group: exercise.muscleGroup,
+              planned_sets: exercise.plannedSets,
+              planned_reps: exercise.plannedReps,
+              actual_sets: exercise.currentSets,
+              actual_reps: exercise.actualReps,
+              weight_used: exercise.weights,
+              weight_unit: weightUnit,
+              rpe: exercise.rpe,
+              rir: exercise.rpe.reduce((sum, rpe) => sum + (Number(rpe) || 0), 0) / exercise.rpe.length,
+              pump_level: pumpLevel,
+              is_sore: false,
+              can_add_sets: false,
+              feedback_given: muscleGroupFeedbacks.has(exercise.muscleGroup)
+            });
+            
+            console.log(`🔍 DEBUG - Successfully saved ${exercise.exercise}`);
+          } catch (error) {
+            console.error(`🔍 DEBUG - Failed to save exercise ${exercise.exercise}:`, error);
+          }
+        } else {
+          console.log(`🔍 DEBUG - Skipping ${exercise.exercise} - no data entered`);
+        }
+      }
+
       await supabase.from('workout_calendar').insert({
         user_id: user.id,
         workout_date: new Date().toISOString().split('T')[0],
