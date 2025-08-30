@@ -950,14 +950,19 @@ export function WorkoutLog() {
                 
                 // Add new sets with empty values and proper array extensions
                 while (targetExercise.actualReps.length < targetExercise.currentSets) {
+                  const setIndex = targetExercise.actualReps.length;
                   targetExercise.actualReps.push(0);
-                  const lastWeight = targetExercise.weights[targetExercise.weights.length - 1];
-                  targetExercise.weights.push(Number(lastWeight) || 0);
-                  targetExercise.prefilledWeights.push(Number(lastWeight) || 0);
+                  targetExercise.weights.push(0); // Empty weight for new sets
+                  targetExercise.prefilledWeights.push(0); // Empty prefilled weight for new sets
                   
-                  // Add temporary RPE - will be recalculated
-                  targetExercise.rpe.push(7);
-                  targetExercise.expectedReps.push(targetExercise.plannedReps);
+                  // Add RPE for new set
+                  const newSetRPE = getTargetRPE(currentWeek, setIndex, targetExercise.currentSets);
+                  targetExercise.rpe.push(newSetRPE);
+                  targetExercise.expectedReps.push(0); // No expected reps for new sets
+                  
+                  // Mark this set as new
+                  if (!targetExercise.newSets) targetExercise.newSets = Array(setIndex).fill(false);
+                  targetExercise.newSets.push(true);
                 }
                 
                 ensureArrayIntegrity(targetExercise);
