@@ -131,7 +131,7 @@ export function WorkoutLog() {
     if (isNaN(numValue) || numValue < 0) {
       switch (field) {
         case 'rpe': return 7;
-        case 'reps': return 1;
+        case 'reps': return 0; // Changed from 1 to 0 for week 1
         case 'weight': return 0;
       }
     }
@@ -142,7 +142,7 @@ export function WorkoutLog() {
         finalValue = Math.min(Math.max(Math.round(numValue), 1), 10);
         break;
       case 'reps': 
-        finalValue = Math.min(Math.max(Math.round(numValue), 1), 100);
+        finalValue = Math.min(Math.max(Math.round(numValue), 0), 100); // Changed from 1 to 0 for week 1
         break;
       case 'weight': 
         finalValue = Math.min(Math.max(numValue, 0), 999);
@@ -169,9 +169,12 @@ export function WorkoutLog() {
     correctedExercise.rpe = Array.from({ length: targetLength }, (_, i) => 
       correctedExercise.rpe[i] || getTargetRPE(currentWeek, i, targetLength)
     );
-    correctedExercise.expectedReps = Array.from({ length: targetLength }, (_, i) => 
-      correctedExercise.expectedReps[i] || correctedExercise.plannedReps
-    );
+    // Don't display expected reps for week 1
+    correctedExercise.expectedReps = currentWeek === 1 ? 
+      Array.from({ length: targetLength }, () => 0) :
+      Array.from({ length: targetLength }, (_, i) => 
+        correctedExercise.expectedReps[i] || correctedExercise.plannedReps
+      );
     
     return correctedExercise;
   };
@@ -1613,9 +1616,11 @@ export function WorkoutLog() {
                                     )}
                                   </div>
                                   
-                                  <div className="text-xs text-muted-foreground mb-2">
-                                    Expected: {expectedReps} reps
-                                  </div>
+                                   {currentWeek > 1 && (
+                                     <div className="text-xs text-muted-foreground mb-2">
+                                       Expected: {expectedReps} reps
+                                     </div>
+                                   )}
                                   
                                   <div className="space-y-2">
                                     <div>
@@ -1652,19 +1657,19 @@ export function WorkoutLog() {
                                       <Label className="text-xs text-muted-foreground">
                                         Reps
                                       </Label>
-                                       <Input
-                                         type="number"
-                                         value={exercise.actualReps?.[setIndex] === 0 ? '' : exercise.actualReps?.[setIndex] || ''}
-                                         autoComplete="off"
-                                         placeholder={String(expectedReps)}
-                                         onChange={(e) => {
-                                           console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
-                                           const value = validateNumericInput(e.target.value, 'reps');
-                                           updateSetData(originalIndex, setIndex, 'reps', value);
-                                         }}
-                                         className="h-8 text-sm"
-                                         min="1"
-                                         max="100"
+                                        <Input
+                                          type="number"
+                                          value={exercise.actualReps?.[setIndex] === 0 ? '' : exercise.actualReps?.[setIndex] || ''}
+                                          autoComplete="off"
+                                          placeholder={currentWeek === 1 ? '' : String(expectedReps)}
+                                          onChange={(e) => {
+                                            console.log(`🔍 DEBUG - Reps input onChange: "${e.target.value}"`);
+                                            const value = validateNumericInput(e.target.value, 'reps');
+                                            updateSetData(originalIndex, setIndex, 'reps', value);
+                                          }}
+                                          className="h-8 text-sm"
+                                          min="0"
+                                          max="100"
                                          onKeyDown={(e) => {
                                            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                                              e.preventDefault();
